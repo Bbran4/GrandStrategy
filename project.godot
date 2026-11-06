@@ -26,6 +26,8 @@ enabled=PackedStringArray("res://addons/terrain_3d/plugin.cfg")
 
 [rendering]
 
+anti_aliasing/quality/msaa_3d=2
+
 renderer/rendering_method="forward_plus"
 renderer/rendering_method.mobile="mobile"
 environment/defaults/default_clear_color=Color(0.055, 0.075, 0.11, 1)

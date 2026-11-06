@@ -36,7 +36,7 @@ func _run() -> void:
 	var scene = load("res://scenes/map_editor.tscn").instantiate()
 	# These nodes and settings must exist in the PackedScene before _ready runs.
 	check(scene.get_node_or_null("Terrain3D") is Terrain3D, "Terrain3D must be authored in the scene")
-	for path in ["WorldEnvironment", "Sun", "Camera3D", "EditorUI/SettingsPanel", "EditorUI/SaveDialog"]:
+	for path in ["WorldEnvironment", "Sun", "Camera3D", "TerrainFocus", "EditorUI/SettingsPanel", "EditorUI/SaveDialog"]:
 		check(scene.has_node(path), "Scene must contain " + path + " before runtime")
 	check(scene.get_node("WorldEnvironment").environment.ambient_light_source == Environment.AMBIENT_SOURCE_COLOR, "Authored environment must use color ambient light")
 	var original_terrain = scene.get_node("Terrain3D")
@@ -47,6 +47,14 @@ func _run() -> void:
 	while scene.busy: await process_frame
 	if has_renderer: check(scene.terrain.material.get_shader_param("surface_map") is Texture2D, "Custom terrain shader must receive its surface texture")
 	check(not scene.has_node("Ocean"), "There must be no separate ocean mesh node")
+	check(scene.terrain.clipmap_target == scene.terrain_focus, "Terrain LOD must follow the ground focus rather than the elevated camera")
+	check(scene.terrain.mesh_size >= 96 and scene.terrain.tessellation_level >= 1, "Terrain must retain the close-up detail settings")
+	var original_target = scene.target
+	scene.target = Vector3(300, 0, 200)
+	scene._update_camera()
+	check(scene.terrain_focus.position == scene.target, "Panning must move the terrain detail focus")
+	scene.target = original_target
+	scene._update_camera()
 	check(scene.terrain.ocean_enabled, "Terrain3D built-in ocean must be enabled")
 	var original_ocean_material = scene.terrain.ocean_material
 	check(original_ocean_material is ShaderMaterial, "The scene must use Terrain3D's native ocean shader material")

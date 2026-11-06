@@ -34,7 +34,10 @@ static func colorize(image: Image, options: Dictionary) -> Image:
 			color = color.lerp(Color("d9dcd1"), snow)
 			var beach = (1.0 - smoothstep(0.001, 0.009, h - sea)) * (1.0 - smoothstep(0.08, 0.35, slope))
 			color = color.lerp(Color("b8ac87"), beach * 0.7)
-			if h < sea: color = Color("45676b").lerp(Color("203f50"), smoothstep(0.0, 0.15, sea - h))
+			# Blend across the waterline rather than classifying each image pixel
+			# as either land or seabed (which leaves a square texel silhouette).
+			var seabed = Color("45676b").lerp(Color("203f50"), smoothstep(0.0, 0.15, sea - h))
+			color = seabed.lerp(color, smoothstep(sea - 0.006, sea + 0.006, h))
 			color *= 1.0 + grain * 0.12
 			color.a = 1.0
 			colors.set_pixel(x, y, color)

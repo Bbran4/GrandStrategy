@@ -127,3 +127,16 @@ The screenshot is written to `tests/output/map_editor_preview.png`.
 `extras/shaders/minimum.gdshader`, preserving its LOD, height sampling, holes,
 and terrain normal calculations. The original copyright header is retained;
 the Terrain3D license remains under `addons/terrain_3d/`.
+
+## Shoreline rendering
+
+The scene's `TerrainFocus` node follows the orbit/pan target and drives
+Terrain3D's clipmap target. High-detail terrain is therefore placed around the
+visible ground, rather than underneath the elevated camera. Mesh size 96 and
+one tessellation level improve close-up terrain; the native ocean uses spacing
+2, mesh size 64 and one tessellation level. Four-sample MSAA smooths silhouettes.
+These settings increase GPU work and are editable in the Inspector.
+
+The custom terrain shader reconstructs heights bilinearly at every LOD, including
+geomorph positions, and surface colors blend continuously across the sea level.
+The generator and saved terrain dimensions are unchanged by this rendering fix.

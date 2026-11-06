@@ -8,6 +8,7 @@ const Appearance = preload("res://scripts/map_editor/terrain_appearance.gd")
 
 const Generator = preload("res://scripts/map_editor/old_world_generator.gd")
 @onready var terrain: Terrain3D = $Terrain3D
+@onready var terrain_focus: Node3D = $TerrainFocus
 @onready var camera: Camera3D = $Camera3D
 @onready var width_input: SpinBox = %WidthInput
 @onready var length_input: SpinBox = %LengthInput
@@ -111,6 +112,7 @@ func _frame_map() -> void:
 	_update_camera()
 
 func _update_camera() -> void:
+	terrain_focus.position = target
 	camera.position = target + Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * distance
 	camera.look_at(target)
 	camera.h_offset = -distance * 0.28

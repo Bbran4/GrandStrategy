@@ -153,17 +153,9 @@ void vertex() {
 			(hole || (_background_mode == 0u && is_none_bg(UV)))) {
 		v_vertex.x = 0. / 0.;
 	} else {
-		// Set final vertex height.
-		float h;
-		// This branch is static for each of the clipmap segments
-		// Interpolated reads only occur where sub-texel values are required.
-		if (scale < _vertex_spacing) {
-			h = interpolated_height(UV);
-		} else {
-			ivec3 coord_a = get_index_coord(start_pos);
-			ivec3 coord_b = get_index_coord(end_pos);
-			h = mix(texelFetch(_height_maps, coord_a, 0).r,texelFetch(_height_maps, coord_b, 0).r,vertex_lerp);
-		}
+		// Bilinear reconstruction also applies to geomorph positions at coarse LODs.
+		// Avoid nearest-texel snapping along the water intersection.
+		float h = mix(interpolated_height(start_pos), interpolated_height(end_pos), vertex_lerp);
 		v_vertex.y = h;
 	}
 

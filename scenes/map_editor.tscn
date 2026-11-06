@@ -86,10 +86,19 @@ ssao_power = 1.2
 [node name="MapEditor" type="Node3D" unique_id=1568646379]
 script = ExtResource("1")
 
-[node name="Terrain3D" type="Terrain3D" parent="." unique_id=1065287620]
+[node name="TerrainFocus" type="Node3D" parent="."]
+position = Vector3(511.5, 0, 255.5)
+
+[node name="Terrain3D" type="Terrain3D" parent="." node_paths=PackedStringArray("clipmap_target") unique_id=1065287620]
 material = SubResource("Terrain3DMaterial_world")
 assets = SubResource("Terrain3DAssets_world")
 displacement_sharpness = 0.5
+clipmap_target = NodePath("../TerrainFocus")
+mesh_size = 96
+tessellation_level = 1
+ocean_mesh_size = 64
+ocean_vertex_spacing = 2.0
+ocean_tessellation_level = 1
 ocean_enabled = true
 ocean_material = SubResource("NativeOceanMaterial")
 free_editor_textures = false
