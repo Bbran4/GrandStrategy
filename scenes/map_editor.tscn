@@ -1,0 +1,244 @@
+[gd_scene format=3 uid="uid://dhgd6whffx85i"]
+
+[ext_resource type="Script" uid="uid://dg8rpqgbn83h8" path="res://scripts/map_editor/map_editor.gd" id="1"]
+
+[sub_resource type="Terrain3DMaterial" id="Terrain3DMaterial_world"]
+_shader_parameters = {
+&"bias_distance": null,
+&"blend_sharpness": null,
+&"depth_blur": null,
+&"distant_normal_scale": null,
+&"flat_terrain_normals": null,
+&"general_uniforms": null,
+&"mipmap_bias": null,
+&"mipmaps": null,
+&"private": null
+}
+world_background = 0
+show_checkered = true
+show_colormap = true
+resource_local_to_scene = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_l5hcm"]
+transparency = 4
+cull_mode = 2
+vertex_color_use_as_albedo = true
+backlight_enabled = true
+backlight = Color(0.5, 0.5, 0.5, 1)
+distance_fade_mode = 1
+distance_fade_min_distance = 128.0
+distance_fade_max_distance = 96.0
+metadata/terrain3d_generated_material = true
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_ikn3w"]
+generated_type = 1
+height_offset = 0.5
+density = 10.0
+material_override = SubResource("StandardMaterial3D_l5hcm")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DAssets" id="Terrain3DAssets_world"]
+mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_ikn3w")])
+resource_local_to_scene = true
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 1
+background_color = Color(0.0627451, 0.117647, 0.168627, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.741176, 0.819608, 0.878431, 1)
+ambient_light_energy = 0.65
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ocean"]
+albedo_color = Color(0.0823529, 0.341176, 0.458824, 1)
+roughness = 0.35
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_ocean"]
+resource_local_to_scene = true
+size = Vector2(1023, 1023)
+
+[node name="MapEditor" type="Node3D" unique_id=1568646379]
+script = ExtResource("1")
+
+[node name="Terrain3D" type="Terrain3D" parent="." unique_id=1065287620]
+material = SubResource("Terrain3DMaterial_world")
+assets = SubResource("Terrain3DAssets_world")
+displacement_sharpness = 0.5
+free_editor_textures = false
+show_checkered = true
+show_colormap = true
+top_level = true
+metadata/_edit_lock_ = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=843926849]
+environment = SubResource("Environment_world")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1496161204]
+transform = Transform3D(0.86602527, 0.4095762, -0.2867884, 0, 0.5735765, 0.819152, 0.50000024, -0.7094063, 0.49673176, 0, 0, 0)
+light_energy = 1.25
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=2005750717]
+transform = Transform3D(1, 0, 0, 0, 0.6599831, 0.7512804, 0, -0.7512804, 0.6599831, 511.5, 1077, 1457.5)
+current = true
+far = 30000.0
+
+[node name="Ocean" type="MeshInstance3D" parent="." unique_id=1910646888]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 511.5, 0.15, 511.5)
+material_override = SubResource("StandardMaterial3D_ocean")
+mesh = SubResource("PlaneMesh_ocean")
+
+[node name="EditorUI" type="CanvasLayer" parent="." unique_id=985617874]
+
+[node name="SettingsPanel" type="PanelContainer" parent="EditorUI" unique_id=359582406]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 360.0
+offset_bottom = 700.0
+
+[node name="Margin" type="MarginContainer" parent="EditorUI/SettingsPanel" unique_id=1385520580]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Controls" type="VBoxContainer" parent="EditorUI/SettingsPanel/Margin" unique_id=843575753]
+layout_mode = 2
+theme_override_constants/separation = 9
+
+[node name="Title" type="Label" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=1091043466]
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "WORLD BUILDER"
+
+[node name="Template" type="Label" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=134126374]
+layout_mode = 2
+text = "Heightmap template: Old World"
+
+[node name="WidthRow" type="HBoxContainer" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=2010493834]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="EditorUI/SettingsPanel/Margin/Controls/WidthRow" unique_id=13266915]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Width (metres / samples)"
+
+[node name="WidthInput" type="SpinBox" parent="EditorUI/SettingsPanel/Margin/Controls/WidthRow" unique_id=1075489437]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(108, 0)
+layout_mode = 2
+min_value = 256.0
+max_value = 2048.0
+step = 256.0
+value = 1024.0
+
+[node name="LengthRow" type="HBoxContainer" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=1609578957]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="EditorUI/SettingsPanel/Margin/Controls/LengthRow" unique_id=1776922402]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Length (metres / samples)"
+
+[node name="LengthInput" type="SpinBox" parent="EditorUI/SettingsPanel/Margin/Controls/LengthRow" unique_id=73625192]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(108, 0)
+layout_mode = 2
+min_value = 256.0
+max_value = 2048.0
+step = 256.0
+value = 512.0
+
+[node name="HeightRow" type="HBoxContainer" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=718250700]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="EditorUI/SettingsPanel/Margin/Controls/HeightRow" unique_id=1703867233]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Height scale (metres)"
+
+[node name="HeightInput" type="SpinBox" parent="EditorUI/SettingsPanel/Margin/Controls/HeightRow" unique_id=321688971]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(108, 0)
+layout_mode = 2
+min_value = 10.0
+max_value = 1500.0
+step = 10.0
+value = 50.0
+
+[node name="SeaRow" type="HBoxContainer" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=504349779]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="EditorUI/SettingsPanel/Margin/Controls/SeaRow" unique_id=556614356]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Sea level (heightmap %)"
+
+[node name="SeaInput" type="SpinBox" parent="EditorUI/SettingsPanel/Margin/Controls/SeaRow" unique_id=1397680633]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(108, 0)
+layout_mode = 2
+value = 20.0
+
+[node name="SeedRow" type="HBoxContainer" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=153952136]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="EditorUI/SettingsPanel/Margin/Controls/SeedRow" unique_id=1293671853]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Seed"
+
+[node name="SeedInput" type="SpinBox" parent="EditorUI/SettingsPanel/Margin/Controls/SeedRow" unique_id=94074519]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(108, 0)
+layout_mode = 2
+max_value = 2147483647.0
+value = 12345.0
+
+[node name="RandomSeedButton" type="Button" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=399637140]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Random seed"
+
+[node name="GenerateButton" type="Button" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=1328735305]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Generate terrain"
+
+[node name="SaveButton" type="Button" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=1944761970]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Save heightmap + terrain…"
+
+[node name="Preview" type="TextureRect" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=1547599554]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(264, 128)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Status" type="Label" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=161367639]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(264, 0)
+layout_mode = 2
+text = "Ready to generate"
+autowrap_mode = 3
+
+[node name="Help" type="Label" parent="EditorUI/SettingsPanel/Margin/Controls" unique_id=2039049815]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Right drag: orbit · Middle drag: pan
+Wheel: zoom · F: frame terrain"
+
+[node name="SaveDialog" type="FileDialog" parent="EditorUI" unique_id=793029087]
+title = "Open a Directory"
+size = Vector2i(832, 468)
+file_mode = 2
+access = 2
+
+[connection signal="pressed" from="EditorUI/SettingsPanel/Margin/Controls/RandomSeedButton" to="." method="_on_random_seed_pressed"]
+[connection signal="pressed" from="EditorUI/SettingsPanel/Margin/Controls/GenerateButton" to="." method="_generate"]
+[connection signal="pressed" from="EditorUI/SettingsPanel/Margin/Controls/SaveButton" to="." method="_on_save_pressed"]
+[connection signal="dir_selected" from="EditorUI/SaveDialog" to="." method="_save"]
