@@ -264,5 +264,12 @@ void fragment() {
     	BACKLIGHT = light_factor * 4.0 * clamp(depth_fade, 0.4, 1.0) * max(1.0 - foam_mask, 0.5) * daytime_mask;
 	}
 
-	ALBEDO = province_apply(v_vertex.xz, ALBEDO);
+	// Composite unlit ink after water shading. The overlay has no normals,
+	// specular reflection, backlighting or separate shadow-casting geometry.
+	float border_coverage;
+	vec3 border_ink = province_apply_surface(v_vertex.xz, vec3(0.0), true, border_coverage);
+	ALBEDO *= 1.0 - border_coverage;
+	SPECULAR *= 1.0 - border_coverage;
+	BACKLIGHT *= 1.0 - border_coverage;
+	EMISSION = border_ink;
 }

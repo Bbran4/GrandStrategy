@@ -25,7 +25,9 @@ int province_decode(vec3 data) {
 vec3 province_lookup_color(sampler2D lookup_map, int id) {
 	return texelFetch(lookup_map, ivec2(id % 256, id / 256), 0).rgb;
 }
-vec3 province_apply(vec2 world, vec3 base) {
+// Water annotations are composited as unlit surface ink by the ocean shader.
+vec3 province_apply_surface(vec2 world, vec3 base, bool water_surface, out float coverage) {
+	coverage = 0.0;
 	if (!province_overlay_enabled) { return base; }
 	vec2 uv = world / province_world_size;
 	if (any(lessThan(uv, vec2(0.0))) || any(greaterThanEqual(uv, vec2(1.0)))) { return base; }
@@ -33,6 +35,8 @@ vec3 province_apply(vec2 world, vec3 base) {
 	if (province == 0) { return base; }
 	int territory = province_decode(texture(territory_id_map, uv).rgb);
 	float land = texelFetch(province_color_lookup, ivec2(province % 256, province / 256), 0).a;
+	// Never paint water IDs onto the seabed (or land IDs onto breaking waves).
+	if (water_surface == (land > 0.5)) { return base; }
 	float opacity = province_fill_opacity * land;
 	vec3 result = province_neutral_base && land > 0.5 ? vec3(0.5) : base;
 	if (province_view_mode == 1) {
@@ -42,6 +46,7 @@ vec3 province_apply(vec2 world, vec3 base) {
 	} else if (province_view_mode == 3) {
 		result = mix(result, province_lookup_color(province_owner_lookup, province), opacity);
 	}
+	if (province_view_mode > 0) { coverage = opacity; }
 	float footprint = max(length(dFdx(uv * province_raster_size)), length(dFdy(uv * province_raster_size)));
 	vec2 distances = texture(province_border_distance, uv).rg * 32.0;
 	float thin = 1.0 - smoothstep(min(4.0, max(0.5, footprint * 0.4)), min(4.0, max(0.5, footprint * 0.4)) + max(0.5, footprint * 0.6), distances.r);
@@ -59,13 +64,29 @@ vec3 province_apply(vec2 world, vec3 base) {
 		thick = (1.0 - smoothstep(max(1.0, footprint), max(1.0, footprint) + max(0.5, footprint * 0.6), distances.r)) * country_edge;
 	}
 	if (province_borders_enabled) {
-		result = mix(result, mix(vec3(0.015, 0.04, 0.07), vec3(0.09, 0.085, 0.07), land), thin * mix(0.25, 0.65, land));
-		result = mix(result, mix(vec3(0.01, 0.025, 0.045), vec3(0.035, 0.03, 0.025), land), thick * mix(0.35, 0.9, land));
+		float thin_alpha = thin * 0.65;
+		float thick_alpha = thick * 0.9;
+		result = mix(result, mix(vec3(0.015, 0.04, 0.07), vec3(0.09, 0.085, 0.07), land), thin_alpha);
+		result = mix(result, mix(vec3(0.01, 0.025, 0.045), vec3(0.035, 0.03, 0.025), land), thick_alpha);
+		coverage = 1.0 - (1.0 - coverage) * (1.0 - thin_alpha) * (1.0 - thick_alpha);
 	}
-	if (province == province_hovered_id && province_hovered_id != 0) { result = mix(result, vec3(1.0), 0.2); }
+	float highlight_mask = water_surface ? thin : 1.0;
+	if (province == province_hovered_id && province_hovered_id != 0) {
+		float hover_alpha = 0.2 * highlight_mask;
+		result = mix(result, vec3(1.0), hover_alpha);
+		coverage = 1.0 - (1.0 - coverage) * (1.0 - hover_alpha);
+	}
 	if (province == province_selected_id && province_selected_id != 0) {
-		result = mix(result, vec3(0.95, 0.67, 0.15), 0.25);
+		float selected_alpha = 0.25 * highlight_mask;
+		result = mix(result, vec3(0.95, 0.67, 0.15), selected_alpha);
 		result = mix(result, vec3(1.0, 0.72, 0.16), thin);
+		coverage = 1.0 - (1.0 - coverage) * (1.0 - selected_alpha) * (1.0 - thin);
 	}
 	return result;
+}
+
+// Terrain overlays affect land only; the seabed stays free of political markings.
+vec3 province_apply(vec2 world, vec3 base) {
+	float coverage;
+	return province_apply_surface(world, base, false, coverage);
 }

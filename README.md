@@ -398,6 +398,10 @@ The map-mode dropdown offers:
 Water retains its ocean appearance. Borders and selection also render on the
 existing Terrain3D ocean clipmap. `strategy_ocean.gdshader` adapts the shipped
 ocean shader with the same overlay include; no separate ocean mesh is created.
+Water province and territory borders are unlit surface markings: they are not
+painted onto the seabed, do not produce their own reflections or shadows, and
+leave the ocean shading visible beneath them. Water hover/selection highlights
+only the border rather than filling the entire water province.
 Province identities use nearest-sampled, non-color ID textures. Separate
 bilinearly sampled distance fields smooth visible borders without changing IDs.
 Each color is one logical province, including any disconnected pieces present
