@@ -466,115 +466,54 @@ files in `data/opengs/` and writes territory/province screenshots under
 `tests/output/`. Existing map-editor and OpenGS-export tests remain available.
 
 
-## Country workshop
+## Tribe library
 
-Press **F5** and choose **Country workshop**, or run
-`scenes/country_creator.tscn` directly with **F6**. This is a separate, scene-authored
-2D authoring tool; it does not generate terrain or need an imported map.
+Press **F5 → Country workshop**, or run `scenes/country_creator.tscn` with **F6**.
+The standalone creator now asks for **only a permanent ID and name**. Every nation
+begins as a tribe. Laws, taxation, technology, national skills and other development
+choices belong to the running game, not to these reusable tribe definitions.
 
-- Create a tribe with a permanent ID, name, adjective and description.
-- Choose map/secondary colors and one of four bundled emblems: raven, longship,
-  knot or spear. The preview updates as you edit.
-- Choose tribal organization, primary culture and faith. Every country begins
-  tribal; characters, dynasties and playable rulers are not part of the model.
-- Set up to two starting traditions and a preferred national path: raiding,
-  commerce, settlement, warfare or governance. This preference does not lock
-  future player choices.
-- Choose starting authority, taxation, military service, land tenure and religious
-  policy laws. Set six AI preference weights independently from player/AI eligibility.
-- Save, search, duplicate, revert, archive and restore countries. Saved IDs are
-  read-only; display names can change without breaking province references.
-  Duplicates get new editable IDs. Archiving retains the original file and ID.
-- Unsaved changes require confirmation before switching countries, creating a
-  blank tribe, reverting, returning to the menu or closing the game window.
+Six fictional starter tribes are included under `data/countries/`:
 
-In editor/development runs, definitions save to `data/countries/<ID>.json`.
-Exported builds use the writable `user://countries` folder. The creator displays
-the full location. The map editor uses the same storage location. Test fixtures
-use isolated folders under `tests/output/` and never populate the real library.
+| ID | Name |
+| --- | --- |
+| FJORD | Fjord Clans |
+| RAVENFELL | Ravenfell |
+| ASHEN_WOLF | Ashen Wolves |
+| IRON_PINE | Ironpine |
+| STORM_COAST | Stormcoast |
+| ELKWOOD | Elkwood |
 
-After importing provinces in the map editor, select a province, choose a saved
-country from the new dropdown and press **Assign country / clear ownership**.
-The dropdown fills the stable ID and map color. Existing manually entered owners
-remain valid. Archived countries are omitted from the dropdown, but existing
-province ownership is preserved. Clear the manual ID to remove ownership.
+Each starter JSON file contains exactly `id` and `name`. Create, rename, search,
+duplicate and save tribes in the tool. Saved IDs remain read-only so province
+references survive name changes. Unsaved changes require confirmation before
+switching records or leaving. Archive/restore remains a library-management feature;
+archived records carry an optional `archived` flag, not gameplay state.
 
-Definitions use schema version 1. Saves validate IDs, names, opaque colors,
-known rule references, unique traditions and bounded AI preferences. A full
-replacement file is written before replacing the previous version, which is kept
-as `<ID>.json.bak`. Invalid library files are skipped with a visible message.
-Rule options live in `data/country_rules/catalog.json`; add cultures/faiths there
-before selecting them. Include `*.json` in a future export preset's non-resource
-file filter so the rules catalogue is packaged. Export packaging itself has not
-been verified in this pass.
+Development saves go to `data/countries/<ID>.json`; the previous version is kept
+as `<ID>.json.bak`. Old full country records are read as identity only. Resaving
+through the creator strips old pregame choices; their previous file is retained
+in the backup. Exported-build custom saves use `user://countries`. Export packaging
+and shipping the bundled tribes remain to be verified.
 
-**Current scope:** country definitions, flag preview, editor persistence and
-province-owner selection work. Technology and national trees now have an interactive build planner (see below).
-Live research income, gameplay bonuses, law/tax effects, population, manpower and
-AI decisions are future simulation work. No inactive rule is applied
-as a hidden gameplay bonus. Capitals, owned provinces and live resources belong
-in scenarios, not reusable country definitions. See
-[the design document](docs/country_creator_design.md).
+In the map editor, choose a saved tribe in the province country dropdown and
+press **Assign country / clear ownership**. A stable display color is generated
+from the ID; it is presentation, not an authored tribe attribute. Existing province
+ownership and manually entered IDs remain supported.
 
-Verification:
+The technology/national-skill planner remains as a separate development prototype
+in `scenes/progression_planner.tscn` and its rules remain available for future
+in-game progression. It is disconnected from tribe creation; no build plan, law,
+technology, skill, faith, culture or AI preference is assigned by this tool.
+There is not yet a playable simulation or an in-game research/law screen.
 
 ```powershell
 godot --headless --path . --script res://tests/country_creator_test.gd
 godot --path . --script res://tests/country_creator_preview.gd
 godot --path . --script res://tests/province_scene_test.gd
-```
-
-The creator tests cover validation, duplicate protection, stable IDs, backup and
-JSON round-trips, malformed files, unsaved-change cancellation, editing laws/AI,
-search and archive/restore. Province scene tests also verify the saved-country
-picker. Preview captures are written under `tests/output/`.
-
-
-### Technology and national skill planner
-
-In **Country workshop → National build**, choose **Explore technology & national
-skill trees**. The separate planner contains 15 technology nodes across agriculture,
-crafts, warfare, seafaring and administration, plus 15 national skills across
-raiding, commerce, settlement, warfare and governance.
-
-- Click any node to inspect its cost, prerequisites and proposed effects.
-- Unlock available nodes with separate research and national-skill budgets.
-  The default preview budgets are 1200 research and 6 skill points; change these
-  to compare builds. These are authoring budgets, not a starting gameplay grant.
-- Each national branch has a foundation and two mutually exclusive specialties.
-  Some skills require technology: Sea Raiders needs Warband Customs and Longships.
-- Connection lines show same-tree prerequisites. Cross-tree requirements appear
-  in the details panel. Scroll horizontally to see all branches and vertically in
-  details to see the complete effect breakdown.
-- Removing a prerequisite refunds it and every dependent node, including across
-  trees. Removing unrelated nodes leaves independent unlocks intact.
-- Lowering a budget below the spent amount is blocked; remove unlocks first.
-- **Use as country build plan** copies the preview into the current country form.
-  Press **Save country** to persist it. **Cancel** or closing the planner leaves
-  the country form unchanged. Reset clears only the open preview.
-
-A plan records budgets and prerequisite-ordered unlock IDs in optional
-`build_plan`. Older version-1 country files without this field still load. Plans
-are validated on save/load, including budgets, missing prerequisites, exclusive
-choices, duplicate/unknown nodes and point limits. Graph definitions are in
-`data/country_rules/progression.json`; invalid references and cycles are rejected.
-Include this JSON in future export packaging alongside the country catalogue.
-
-Effect totals currently add percentage modifiers for comparison. Values are
-provisional design values, not balanced outcomes or an active economy/combat
-simulation. Starting traditions, laws and AI preferences are separate and do not
-silently contribute extra planner bonuses. All countries still start tribal;
-planning advanced technology does not change their government or grant starting
-unlocks. This pass introduces reusable unlock/spending/refund rules, not a running
-research clock, skill-point earning system or government reform simulation.
-
-```powershell
 godot --headless --path . --script res://tests/nation_progression_test.gd
-godot --path . --script res://tests/progression_preview.gd
 ```
 
-These verify prerequisite and exclusive-branch rules, currency separation,
-transactional plan loading, refunds across trees, invalid graphs, old-country
-compatibility, country save/reload and planner application/cancellation. Preview
-screenshots are `tests/output/technology_tree.png` and
-`tests/output/national_skill_tree.png`.
+Checks cover minimal records, duplicate IDs, backups, invalid files, legacy
+identity loading, discard protection, archive/restore, starter tribes and province
+assignment. Tests write only isolated fixtures under `tests/output/`.

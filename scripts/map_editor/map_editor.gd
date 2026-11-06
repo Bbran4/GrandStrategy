@@ -378,10 +378,10 @@ func _refresh_country_library() -> void:
 	country_library.set_item_metadata(0,{})
 	var library = CountryStore.load_library(country_directory)
 	for country in library.records:
-		if country.archived: continue
+		if country.get("archived",false): continue
 		country_library.add_item(country.name + " [" + country.id + "]")
 		country_library.set_item_metadata(country_library.item_count-1,country)
-	country_library.tooltip_text = "Choose a saved nation to fill its ID and map color; then assign it to the selected province."
+	country_library.tooltip_text = "Choose a saved nation to fill its ID and a display color; then assign it to the selected province."
 	if not library.errors.is_empty(): country_library.tooltip_text += "\n" + "; ".join(library.errors)
 	for i in range(1,country_library.item_count):
 		if country_library.get_item_metadata(i).id == province_owner.text: country_library.select(i); break
@@ -390,4 +390,4 @@ func _on_country_library_selected(index: int) -> void:
 	if busy or index == 0: return
 	var country: Dictionary = country_library.get_item_metadata(index)
 	province_owner.text = country.id
-	province_owner_color.color = Color(country.color)
+	province_owner_color.color = CountryStore.map_color(country.id)

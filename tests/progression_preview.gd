@@ -3,14 +3,9 @@ const Store = preload("res://scripts/countries/country_store.gd")
 func _initialize() -> void: call_deferred("_run")
 func _run() -> void:
 	root.gui_embed_subwindows = true
-	var creator = load("res://scenes/country_creator.tscn").instantiate()
-	creator.storage_directory="res://tests/output/progression_preview"
-	root.add_child(creator)
-	var data = Store.blank(); data.id="FJORD"; data.name="Fjord clans"; data.adjective="Fjordish"
-	creator._edit(data,"")
-	creator.get_node("%Tabs").current_tab=2
-	var planner = creator.get_node("ProgressionPlanner")
-	planner.open_plan(data.build_plan)
+	var planner = load("res://scenes/progression_planner.tscn").instantiate()
+	root.add_child(planner)
+	planner.open_plan({"research_budget":1200,"skill_budget":6,"unlocks":[]})
 	for id in ["clinker_hulls","longships","warband_customs","sea_raiders"]: planner.model.unlock(id)
 	planner.selected="longships"; planner._refresh()
 	for frame in 8: await process_frame

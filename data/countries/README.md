@@ -1,11 +1,10 @@
-# Country library
+# Tribe identities
 
-Countries created in the standalone Country workshop are saved here during
-editor/development runs. Start the project and choose Country workshop.
-Use the tool to create definitions; no sample country is installed automatically.
+Each tribe needs only an ID and a name. The six bundled fictional tribes have
+exactly these two fields. Edit them through the standalone Country workshop.
+Tech, skills, laws, taxation and other progression choices are made during play.
 
-Each definition uses its permanent uppercase ID as its JSON filename. A .bak
-file preserves the previous saved version. Archive countries through the workshop
-rather than deleting IDs already referenced by province ownership.
-
-Exported builds save new countries under user://countries instead.
+Archive/restore may add an administrative archived flag. Stable IDs preserve
+province references; display names can be changed. Saves keep a .bak copy of the
+previous file. Legacy full country files load as identities; resaving removes
+pregame choices while keeping the previous version in that backup.
