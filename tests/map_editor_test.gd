@@ -2,6 +2,7 @@ extends SceneTree
 
 const Generator = preload("res://scripts/map_editor/old_world_generator.gd")
 var failures: Array[String] = []
+var has_renderer = DisplayServer.get_name() != "headless"
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -16,6 +17,8 @@ func _run() -> void:
 	var first = generator.generate(256, 512, 12345)
 	var repeat = generator.generate(256, 512, 12345)
 	var different = generator.generate(256, 512, 98765)
+	var coarse = generator.generate(256, 512, 12345, 0.0)
+	check(first.get_data() != coarse.get_data(), "Detail strength must change actual terrain geometry")
 	check(first.get_data() == repeat.get_data(), "Same seed must reproduce heightmap")
 	check(first.get_data() != different.get_data(), "Different seed must vary heightmap")
 	check(first.get_size() == Vector2i(256, 512), "Rectangular dimensions must be preserved")
@@ -33,7 +36,7 @@ func _run() -> void:
 	var scene = load("res://scenes/map_editor.tscn").instantiate()
 	# These nodes and settings must exist in the PackedScene before _ready runs.
 	check(scene.get_node_or_null("Terrain3D") is Terrain3D, "Terrain3D must be authored in the scene")
-	for path in ["WorldEnvironment", "Sun", "Camera3D", "Ocean", "EditorUI/SettingsPanel", "EditorUI/SaveDialog"]:
+	for path in ["WorldEnvironment", "Sun", "Camera3D", "EditorUI/SettingsPanel", "EditorUI/SaveDialog"]:
 		check(scene.has_node(path), "Scene must contain " + path + " before runtime")
 	check(scene.get_node("WorldEnvironment").environment.ambient_light_source == Environment.AMBIENT_SOURCE_COLOR, "Authored environment must use color ambient light")
 	var original_terrain = scene.get_node("Terrain3D")
@@ -42,11 +45,19 @@ func _run() -> void:
 	var authored_children = scene.get_children().duplicate()
 	root.add_child(scene)
 	while scene.busy: await process_frame
+	if has_renderer: check(scene.terrain.material.get_shader_param("surface_map") is Texture2D, "Custom terrain shader must receive its surface texture")
+	check(not scene.has_node("Ocean"), "There must be no separate ocean mesh node")
+	check(scene.terrain.ocean_enabled, "Terrain3D built-in ocean must be enabled")
+	var original_ocean_material = scene.terrain.ocean_material
+	check(original_ocean_material is ShaderMaterial, "The scene must use Terrain3D's native ocean shader material")
+	check(original_ocean_material.shader.resource_path == "res://addons/terrain_3d/extras/shaders/ocean_shader.gdshader", "Use Terrain3D's ocean clipmap shader")
+	check(original_ocean_material.get_shader_parameter("sea_level") == 0.0, "Ocean uses world Y zero")
 	check(scene.terrain == original_terrain, "Startup must retain the authored Terrain3D node")
 	check(scene.get_children() == authored_children, "Runtime must not create or replace scene children")
 	check(scene.generate_button.pressed.is_connected(scene._generate), "Generate signal must be connected in the scene")
 	check(scene.save_dialog.dir_selected.is_connected(scene._save), "Save dialog signal must be connected in the scene")
-	check(scene.terrain.data.get_regions_active().size() == 16, "Default 1024 map requires 16 regions")
+	var expected_regions = int(scene.generated_settings.width / 256) * int(scene.generated_settings.length / 256)
+	check(scene.terrain.data.get_regions_active().size() == expected_regions, "Initial map must contain the expected regions")
 	scene.width_input.value = 256
 	scene.length_input.value = 512
 	scene.height_input.value = 500
@@ -69,13 +80,38 @@ func _run() -> void:
 	scene._save(ProjectSettings.globalize_path(folder))
 	var saved = Image.load_from_file(folder.path_join("heightmap.exr"))
 	check(saved != null and saved.get_size() == first.get_size(), "EXR export must preserve dimensions")
+	var saved_material = load(folder.path_join("terrain_material.res")) as Terrain3DMaterial
+	check(saved_material != null and saved_material.shader_override_enabled, "Save must retain the custom terrain material")
+	if has_renderer:
+		# Terrain3D initializes a loaded material's uniforms when attached to a node.
+		scene.terrain.material = saved_material
+		await process_frame
+		check(saved_material.get_shader_param("surface_map") is Texture2D, "Saved terrain material must retain its generated surface texture")
+		scene.terrain.material = original_material
+	var saved_water = load(folder.path_join("water_material.res")) as ShaderMaterial
+	check(saved_water != null and saved_water.shader.resource_path == "res://addons/terrain_3d/extras/shaders/ocean_shader.gdshader", "Saved water must retain Terrain3D native ocean shader")
 	var settings = JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("map.json")))
-	check(settings.seed == 12345 and settings.width == 256 and settings.length == 512, "Saved settings must match generated map")
+	check(settings.generator_revision == 2 and settings.detail_strength == 1.0 and settings.seed == 12345 and settings.width == 256 and settings.length == 512, "Saved settings must match generated map")
 	check(DirAccess.get_files_at(folder.path_join("terrain")).size() == 2, "Save must write Terrain3D regions")
 	var previous = FileAccess.get_file_as_bytes(folder.path_join("heightmap.exr"))
 	scene._save(ProjectSettings.globalize_path(folder))
 	check(previous == FileAccess.get_file_as_bytes(folder.path_join("heightmap.exr")), "Nonempty map folders must not be overwritten")
+	# Regression: a StandardMaterial3D used to cast to Nil and crash _import.
+	scene.terrain.ocean_material = StandardMaterial3D.new()
+	scene.generate_button.pressed.emit()
+	while scene.busy: await process_frame
+	check(scene.terrain.ocean_material is StandardMaterial3D, "Generation must tolerate a non-shader ocean material")
+	check(not scene.save_button.disabled, "Generation must complete with a non-shader ocean material")
+	# Check an unconfigured material before the native ocean has live clipmap RIDs.
+	# Clearing an active native material itself is an addon/engine concern.
+	var probe = load("res://scenes/map_editor.tscn").instantiate()
+	probe.terrain = probe.get_node("Terrain3D")
+	probe.terrain.ocean_material = null
+	probe._configure_ocean()
+	check(probe.terrain.ocean_material != null, "A cleared ocean material must receive the native fallback")
+	probe.free()
 	scene.queue_free()
 	await process_frame
+	if not has_renderer: print("GPU texture-binding checks require the non-headless test run.")
 	print("MAP EDITOR TESTS: ", "PASS" if failures.is_empty() else failures)
 	quit(0 if failures.is_empty() else 1)

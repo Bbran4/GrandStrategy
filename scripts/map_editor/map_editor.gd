@@ -1,9 +1,14 @@
 extends Node3D
 
+const DefaultOceanMaterial = preload("res://addons/terrain_3d/extras/shaders/M_ocean.tres")
+
+const Appearance = preload("res://scripts/map_editor/terrain_appearance.gd")
+
+@export_range(0.0, 2.0, 0.1) var detail_strength: float = 1.0
+
 const Generator = preload("res://scripts/map_editor/old_world_generator.gd")
 @onready var terrain: Terrain3D = $Terrain3D
 @onready var camera: Camera3D = $Camera3D
-@onready var ocean: MeshInstance3D = $Ocean
 @onready var width_input: SpinBox = %WidthInput
 @onready var length_input: SpinBox = %LengthInput
 @onready var height_input: SpinBox = %HeightInput
@@ -20,12 +25,13 @@ var worker: Thread
 var busy = false
 var target = Vector3.ZERO
 var yaw = 0.0
-var pitch = 0.85
+var pitch = 1.08
 var distance = 1400.0
 var dragging = false
 var panning = false
 
 func _ready() -> void:
+	_configure_ocean()
 	terrain.set_camera(camera)
 	_generate()
 
@@ -41,9 +47,12 @@ func _generate() -> void:
 	generate_button.disabled = true
 	save_button.disabled = true
 	status.text = "Generating Old World heightmap…"
-	var options = {"width": int(width_input.value), "length": int(length_input.value), "height_scale": height_input.value, "sea_level": sea_input.value / 100.0, "seed": int(seed_input.value), "template": "Old World"}
+	var options = {"width": int(width_input.value), "length": int(length_input.value), "height_scale": height_input.value, "sea_level": sea_input.value / 100.0, "seed": int(seed_input.value), "template": "Old World", "generator_revision": 2, "detail_strength": detail_strength}
 	worker = Thread.new()
-	var error = worker.start(func(): return Generator.new().generate(options.width, options.length, options.seed))
+	var error = worker.start(func():
+		var image = Generator.new().generate(options.width, options.length, options.seed, options.detail_strength)
+		return {"height": image, "color": Appearance.colorize(image, options)}
+	)
 	if error != OK:
 		busy = false
 		generate_button.disabled = false
@@ -51,52 +60,60 @@ func _generate() -> void:
 		return
 	# Poll on the main thread. Scene-tree / Terrain3D operations stay here.
 	while worker.is_alive(): await get_tree().process_frame
-	var result: Image = worker.wait_to_finish()
+	var result: Dictionary = worker.wait_to_finish()
 	worker = null
 	status.text = "Building Terrain3D regions…"
 	await get_tree().process_frame
-	_import(result, options)
+	_import(result.height, result.color, options)
 	busy = false
 	generate_button.disabled = false
 	save_button.disabled = false
 
-func _import(image: Image, options: Dictionary) -> void:
+func _import(image: Image, colors: Image, options: Dictionary) -> void:
 	# Keep the authored Terrain3D node, material, assets and inspector settings.
 	# Only replace its map regions, using Terrain3D's supported data API.
 	for region: Terrain3DRegion in terrain.data.get_regions_active():
 		terrain.data.remove_region(region, false)
 	terrain.data.update_maps(Terrain3DRegion.TYPE_MAX, true, false)
-	var colors = Image.create_empty(image.get_width(), image.get_height(), false, Image.FORMAT_RGBA8)
 	var sea = float(options.sea_level)
-	for y in image.get_height():
-		for x in image.get_width():
-			var h = image.get_pixel(x, y).r
-			var color: Color
-			if h < sea: color = Color("23546c")
-			elif h < sea + 0.025: color = Color("b9ab78")
-			elif h < 0.50: color = Color("476e40").lerp(Color("899064"), clampf((h - sea) / maxf(0.01, 0.5 - sea), 0, 1))
-			else: color = Color("847c70").lerp(Color("e0e6df"), clampf((h - 0.5) / 0.4, 0, 1))
-			colors.set_pixel(x, y, color)
 	# Use floating-point heights directly; avoid 8-bit PNG terracing.
 	terrain.data.import_images([image, null, colors], Vector3.ZERO, -sea * options.height_scale, options.height_scale)
+	var surface_image = colors.duplicate()
+	surface_image.generate_mipmaps()
+	terrain.material.set_shader_param("surface_map", ImageTexture.create_from_image(surface_image))
+	terrain.material.set_shader_param("map_size", Vector2(options.width, options.length))
+	_configure_ocean()
 	heightmap = image
 	generated_settings = options.duplicate()
 	preview.texture = ImageTexture.create_from_image(colors)
-	var plane = ocean.mesh as PlaneMesh
-	plane.size = Vector2(options.width - 1, options.length - 1)
-	ocean.position = Vector3((options.width - 1) * 0.5, 0.15, (options.length - 1) * 0.5)
 	_frame_map()
 	status.text = "%d × %d · seed %d\nTerrain ready. Changes apply on Generate." % [options.width, options.length, options.seed]
+
+func _configure_ocean() -> void:
+	# Terrain3D owns the ocean clipmap and passes it mesh/camera uniforms.
+	# Keep the inspector material; only supply a fallback if it was cleared.
+	if terrain.ocean_material == null:
+		terrain.ocean_material = DefaultOceanMaterial.duplicate(true)
+	terrain.ocean_enabled = true
+	var water_material = terrain.ocean_material as ShaderMaterial
+	if water_material != null and water_material.shader != null:
+		for uniform in water_material.shader.get_shader_uniform_list():
+			if uniform.name == "sea_level":
+				# Imported land is already offset by the chosen normalized sea level.
+				# Terrain3D's ocean shader uses world metres, so its level stays at zero.
+				water_material.set_shader_parameter("sea_level", 0.0)
+				break
 
 func _frame_map() -> void:
 	if generated_settings.is_empty(): return
 	target = Vector3((generated_settings.width - 1) * 0.5, 0, (generated_settings.length - 1) * 0.5)
-	distance = maxf(generated_settings.width, generated_settings.length) * 1.4
+	distance = maxf(generated_settings.width, generated_settings.length) * 0.80
 	_update_camera()
 
 func _update_camera() -> void:
 	camera.position = target + Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * distance
 	camera.look_at(target)
+	camera.h_offset = -distance * 0.28
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -131,12 +148,20 @@ func _save(folder: String) -> void:
 		status.text = "Could not create terrain folder: " + error_string(error)
 		return
 	terrain.data.save_directory(terrain_folder)
+	# Persist the terrain surface texture and Terrain3D ocean material.
+	# Binary resources keep floating-point image data compact and lossless.
+	error = ResourceSaver.save(terrain.material, folder.path_join("terrain_material.res"))
+	if error == OK:
+		error = ResourceSaver.save(terrain.ocean_material, folder.path_join("water_material.res"))
+	if error != OK:
+		status.text = "Could not save map materials: " + error_string(error)
+		return
 	var file = FileAccess.open(folder.path_join("map.json"), FileAccess.WRITE)
 	if file == null:
 		status.text = "Could not save map settings."
 		return
 	file.store_string(JSON.stringify(generated_settings, "\t"))
-	status.text = "Saved heightmap.exr, map.json and Terrain3D regions to:\n" + folder
+	status.text = "Saved heightmap, settings, terrain and materials to:\n" + folder
 
 func _exit_tree() -> void:
 	if worker != null and worker.is_started(): worker.wait_to_finish()

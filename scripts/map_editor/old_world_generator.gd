@@ -22,7 +22,7 @@ var neighbours: Array[PackedInt32Array] = []
 var columns: int
 var rows: int
 
-func generate(width: int, length: int, map_seed: int) -> Image:
+func generate(width: int, length: int, map_seed: int, detail_strength: float = 1.0) -> Image:
 	assert(width >= 64 and width <= 2048 and length >= 64 and length <= 2048)
 	rng.seed = map_seed
 	# Approximately 10k simulation cells, independent of output resolution.
@@ -64,8 +64,10 @@ func generate(width: int, length: int, map_seed: int) -> Image:
 	for y in rows:
 		for x in columns:
 			image.set_pixel(x, y, Color(heights[x + y * columns] / 100.0, 0, 0))
-	image.resize(width, length, Image.INTERPOLATE_BILINEAR)
-	return image
+	# Cubic reconstruction plus domain-warped, multi-scale ridges adds real geometry
+	# between the original recipe cells. Coordinates stay stable across resolutions.
+	image.resize(width, length, Image.INTERPOLATE_CUBIC)
+	return _refine(image, map_seed, detail_strength)
 
 func _number(value: String) -> float:
 	var parts = value.split("-")
@@ -186,3 +188,46 @@ func _smooth() -> void:
 		for next in neighbours[i]: total += heights[next]
 		result[i] = floor((heights[i] + total / (neighbours[i].size() + 1)) / 2)
 	heights = result
+
+func _refine(base: Image, map_seed: int, strength: float) -> Image:
+	var ridges = FastNoiseLite.new()
+	ridges.seed = map_seed + 411
+	ridges.frequency = 0.024
+	ridges.fractal_type = FastNoiseLite.FRACTAL_RIDGED
+	ridges.fractal_octaves = 5
+	ridges.fractal_gain = 0.48
+	ridges.domain_warp_enabled = true
+	ridges.domain_warp_amplitude = 14.0
+	ridges.domain_warp_frequency = 0.009
+	var fine = FastNoiseLite.new()
+	fine.seed = map_seed + 7919
+	fine.frequency = 0.11
+	fine.fractal_octaves = 3
+	var warp = FastNoiseLite.new()
+	warp.seed = map_seed + 173
+	warp.frequency = 0.035
+	warp.fractal_octaves = 3
+	var result = Image.create_empty(base.get_width(), base.get_height(), false, Image.FORMAT_RF)
+	var sample_scale = 1024.0 / maxf(base.get_width(), base.get_height())
+	for y in base.get_height():
+		for x in base.get_width():
+			var px = x * sample_scale
+			var py = y * sample_scale
+			var wx = warp.get_noise_2d(px, py)
+			var wy = warp.get_noise_2d(px + 537.0, py - 321.0)
+			var sx = clampf(x + wx * 3.5 * strength / sample_scale, 0, base.get_width() - 1.001)
+			var sy = clampf(y + wy * 3.5 * strength / sample_scale, 0, base.get_height() - 1.001)
+			var ix = int(sx)
+			var iy = int(sy)
+			var a = lerpf(base.get_pixel(ix, iy).r, base.get_pixel(ix + 1, iy).r, sx - ix)
+			var b = lerpf(base.get_pixel(ix, iy + 1).r, base.get_pixel(ix + 1, iy + 1).r, sx - ix)
+			var h = clampf(lerpf(a, b, sy - iy), 0, 1)
+			var mountain_mask = smoothstep(0.25, 0.65, h)
+			var land_mask = smoothstep(0.19, 0.27, h)
+			var ridge = ridges.get_noise_2d(px, py)
+			var grain = fine.get_noise_2d(px, py)
+			# Broad plains, incised ridges, and much finer foothill relief.
+			h += (ridge * (0.008 + mountain_mask * 0.065) * land_mask + grain * (0.002 + mountain_mask * 0.009) + wx * 0.003) * strength
+			if h > 0.2: h = 0.2 + pow((h - 0.2) / 0.8, 1.22) * 0.8
+			result.set_pixel(x, y, Color(clampf(h, 0, 1), 0, 0))
+	return result

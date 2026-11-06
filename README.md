@@ -8,7 +8,8 @@ The project now opens the runtime Map Editor. It uses Forward+ rendering.
 `scenes/map_editor.tscn` contains the complete editable setup:
 
 - `Terrain3D`, with scene-owned material and assets, region size 256, and spacing 1.
-- `WorldEnvironment`, `Sun`, `Camera3D`, and `Ocean` with its mesh and material.
+- `WorldEnvironment`, `Sun`, and `Camera3D`. The ocean clipmap is owned by
+  Terrain3D, using its Ocean Enabled and Ocean Material inspector properties.
 - `EditorUI`, including every settings control, preview, buttons and save dialog.
 
 Select these nodes in the Godot scene tree to change their settings in the
@@ -16,7 +17,7 @@ Inspector. Button and save-dialog signals are connected in the scene file.
 The Terrain3D editor plugin is enabled in the project settings.
 
 The controller references these existing nodes. Generation replaces only the
-Terrain3D region data and updates the preview, ocean bounds and camera framing;
+Terrain3D region data and updates the preview and camera framing;
 it preserves the Terrain3D node, material and assets. Terrain height data is
 still generated when the scene runs, rather than stored in the starter scene.
 
@@ -38,7 +39,18 @@ Open `project.godot` and press **F5**, or open `scenes/map_editor.tscn` and pres
 
 The heightmap is generated off the main thread. Its floating-point values are
 imported directly into Terrain3D; the terrain is not a replacement mesh.
-A simple elevation colormap and ocean plane provide an initial visualization.
+The surface uses slope, elevation, moisture and latitude to blend plains,
+forest-colored areas, dry ground, stone and snow. Terrain3D uses a custom shader
+for fine surface variation. The ocean uses Terrain3D's shipped ocean shader, with its clipmap rendering,
+depth-based shading and a world sea level of zero.
+Both shading resources are authored in the scene and editable in the Inspector.
+
+Select the MapEditor root to adjust **Detail Strength** (0–2, default 1). This
+changes real ridge/foothill geometry, not just the shading. Higher height scales
+make relief more pronounced; existing saved width/length/height defaults are
+preserved. Generation and color calculation both run on a worker thread.
+This is a procedural terrain visual pass: it does not yet simulate erosion,
+river drainage, real forest instances, or political territories.
 
 ## Save
 
@@ -47,12 +59,17 @@ Choose **Save heightmap + terrain…** and select an empty folder. This writes:
 - `heightmap.exr`: normalized floating-point heights, before sea offset/scale.
 - `map.json`: the settings used for the generated map.
 - `terrain/terrain3d_*.res`: Terrain3D region resources, including height and color.
+- `terrain_material.res`: the custom terrain material with its generated surface texture.
+- `water_material.res`: the native Terrain3D ocean material and its settings.
 
 An occupied folder is rejected. Editing the controls after generating does not
 change the settings saved with the current map. To use the saved regions in a
 separate scene, create a Terrain3D with region size 256 and vertex spacing 1,
-set its data directory to `terrain/`, and use a material showing its colormap
-with background disabled. For a raw EXR import, use `height_scale` and offset
+set its data directory to `terrain/`, assign `terrain_material.res`, and give
+its assets at least one valid RGBA8 texture (as in MapEditor). Enable the Terrain3D ocean and assign
+`water_material.res` to its Ocean Material property. No separate ocean mesh is used. Retain this project's `shaders/` directory,
+which the saved materials reference. The node initializes material uniforms
+when the saved material is attached. For a raw EXR import, use `height_scale` and offset
 `-sea_level * height_scale` from `map.json`. There is no saved-map browser or
 load button yet.
 
@@ -68,10 +85,12 @@ for this implementation at commit `83838f14f1fb0523aed0b5fbb252f4595443c7f9`:
 
 License and attribution are in `third_party/azgaar/LICENSE.txt`.
 This implementation uses approximately 10,000 staggered, six-neighbour raster
-cells, Godot's seeded random generator, and bilinear interpolation to the chosen
-output dimensions. It preserves the Old World recipe, not Azgaar's exact
+cells and Godot's seeded random generator for continental layout. Cubic
+reconstruction, domain warping and multi-octave ridged detail then produce the
+final floating-point heightmap. Generator revision 2 and detail strength are
+recorded in `map.json`; existing seeds produce updated geometry with this revision. It preserves the Old World recipe, not Azgaar's exact
 Voronoi topology, random sequence, or pixel-for-pixel results. It does not yet
-create rivers, biomes, provinces, countries, or gameplay.
+create rivers, biome gameplay data, provinces, countries, or gameplay.
 
 ## Verification
 
@@ -87,6 +106,13 @@ EXR/settings/region saving, overwrite protection, scene-authored nodes and
 signals, and preservation of the Terrain3D node/material/assets on regeneration. Test outputs are ignored
 by Git under `tests/output/`.
 
+Headless tests skip the two GPU-only terrain uniform checks. To verify texture
+binding and that saved materials restore their textures on Terrain3D, run:
+
+```powershell
+godot --path . --script res://tests/map_editor_test.gd
+```
+
 For a rendered screenshot check:
 
 ```powershell
@@ -94,3 +120,10 @@ godot --path . --resolution 1280x720 --script res://tests/map_editor_preview.gd
 ```
 
 The screenshot is written to `tests/output/map_editor_preview.png`.
+
+## Shader attribution
+
+`shaders/strategy_terrain.gdshader` adapts Terrain3D's shipped
+`extras/shaders/minimum.gdshader`, preserving its LOD, height sampling, holes,
+and terrain normal calculations. The original copyright header is retained;
+the Terrain3D license remains under `addons/terrain_3d/`.
