@@ -91,7 +91,7 @@ License and attribution are in `third_party/azgaar/LICENSE.txt`.
 This implementation uses approximately 10,000 staggered, six-neighbour raster
 cells and Godot's seeded random generator for continental layout. Cubic
 reconstruction, domain warping and multi-octave ridged detail then produce the
-final floating-point heightmap. Generator revision 4, height sampling, erosion strength and detail strength are
+final floating-point heightmap. Generator revision 5, height sampling, erosion strength and detail strength are
 recorded in `map.json`; existing seeds produce updated geometry with this revision. It preserves the Old World recipe, not Azgaar's exact
 Voronoi topology, random sequence, or pixel-for-pixel results. It does not yet
 create rivers, biome gameplay data, provinces, countries, or gameplay.
@@ -161,7 +161,7 @@ surface shading independently of the MapEditor root's geometry Detail Strength.
 Generation also applies six conservative thermal-weathering iterations to the
 uplands. Steep cells transfer material downhill rather than simply blurring the
 whole map. This thermal pass is followed by the hydraulic stage described below.
-Revision 4 is recorded in saved settings; matching old seeds have updated
+Revision 5 is recorded in saved settings; matching old seeds have updated
 elevations after the new reconstruction and erosion stages. Coastline blending and the native Terrain3D
 ocean remain in use.
 
@@ -184,14 +184,15 @@ Images are written to `tests/output/detail_overview.png` and
 material layers, saved texture restoration, weathering mass conservation,
 downhill transfer and lowland preservation, alongside the existing map checks.
 
-## Heightmap landforms — revision 4
+## Heightmap landforms — shared pipeline
 
 Old World remains the continental layout recipe. The elevation pipeline now:
 
 1. Reconstructs the coarse recipe with a separable Gaussian kernel so the old
    cell falloff does not become tall, narrow walls.
-2. Reserves height headroom and adds domain-warped, seven-octave mountain ridges
-   and a separate secondary spur field at the actual output resolution.
+2. Uses the selected reference preset to add domain-warped, seven-octave
+   mountain ridges and secondary spurs at the actual output resolution. The
+   softer preset reduces upland heights; the rugged preset retains their relief.
 3. Applies conservative thermal weathering to steep uplands.
 4. Runs seeded water droplets down bilinear height gradients, removing soil with
    a weighted brush and depositing sediment where their carrying capacity falls.
@@ -224,6 +225,42 @@ godot --path . --script res://tests/heightmap_geometry_preview.gd
 ```
 
 This renders a neutral gray relief study at height scale 100, with surface detail
-and bump shading disabled. It saves `tests/output/heightmap_geometry_v4.png`
-and an 8-bit grayscale inspection image, `tests/output/heightmap_data_v4.png`.
+and bump shading disabled. It saves `tests/output/terrain_rugged_reference.png`
+(or `terrain_softer_reference.png` with `-- --softer`) and an 8-bit grayscale
+inspection image, `tests/output/heightmap_data_v4.png`.
 The saved map's actual elevation data remains floating-point EXR.
+
+## Province generation decision — OpenGS
+
+Decision recorded 6 November 2026: use **OpenGS Map Tool** for province and
+territory generation/authoring: https://github.com/Thomas-Holtvedt/opengs-maptool.
+
+Planned workflow: derive a coastline/land mask from the finished terrain, author
+provinces in OpenGS, then import its province image and JSON data into Godot.
+Terrain3D remains the terrain renderer. Province IDs, adjacency, selection,
+ownership and political overlays belong to the game's province system.
+This is a recorded project decision; the OpenGS export/import integration is
+not implemented yet. No province plugin is being substituted for Terrain3D.
+
+## Accepted terrain references — revision 5
+
+The default is now **Rugged reference**, using the earlier additive mountain
+ridge/spur formula, High 2x height sampling, erosion 1.0, detail strength 1.0,
+height scale 100, sea level 20%, and seed 12345. The second **Softer reference**
+preset applies the earlier 0.72 upland height multiplier before the additive
+ridge stage. These correspond to the rugged and softer gray relief previews
+selected by the user. Later multiplicative ridge reshaping is no longer used.
+
+**Neutral relief view** is enabled by default: a gray material with surface
+texture detail and bump strength disabled, so the actual terrain shape remains
+visible. Turn this off to return to terrain colors and material detail. This
+view switch does not regenerate or change elevation data.
+
+Preset and view controls are scene-authored and available in the running map
+editor. Generation settings record revision 5, relief_profile (0 rugged / 1
+softer), and neutral_relief along with the existing settings. Reference previews
+are reproducible with `tests/heightmap_geometry_preview.gd`; pass `-- --softer`
+to capture the softer variant. The preview camera differs between references,
+while both use the same physical dimensions, seed, sampling and height scale.
+
+The user-selected visual targets are preserved in [rugged-target.png](docs/terrain-references/rugged-target.png) and [softer-target.png](docs/terrain-references/softer-target.png). Compare future terrain changes against these before replacing the defaults.

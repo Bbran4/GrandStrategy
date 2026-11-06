@@ -43,6 +43,8 @@ func _run() -> void:
 	check(hydraulic.erode(basin, 5, 0.0).get_data() == basin.get_data(), "Disabling hydraulic erosion must preserve the input")
 	var first = generator.generate(256, 512, 12345)
 	var repeat = generator.generate(256, 512, 12345)
+	var softer = generator.generate(256, 512, 12345, 1.0, 1.0, 1)
+	check(softer.get_data() != first.get_data(), "Reference presets must produce different landforms")
 	var different = generator.generate(256, 512, 98765)
 	var coarse = generator.generate(256, 512, 12345, 0.0)
 	check(first.get_data() != coarse.get_data(), "Detail strength must change actual terrain geometry")
@@ -68,6 +70,8 @@ func _run() -> void:
 	for path in ["WorldEnvironment", "Sun", "Camera3D", "TerrainFocus", "EditorUI/SettingsPanel", "EditorUI/SaveDialog"]:
 		check(scene.has_node(path), "Scene must contain " + path + " before runtime")
 	check(scene.get_node("WorldEnvironment").environment.ambient_light_source == Environment.AMBIENT_SOURCE_COLOR, "Authored environment must use color ambient light")
+	check(scene.get_node("%HeightInput").value == 100.0, "Default relief scale must match accepted previews")
+	check(scene.get_node("%NeutralView").button_pressed, "Default view must match neutral reference previews")
 	var original_terrain = scene.get_node("Terrain3D")
 	var original_material = original_terrain.material
 	var original_assets = original_terrain.assets
@@ -93,6 +97,11 @@ func _run() -> void:
 	check(original_ocean_material is ShaderMaterial, "The scene must use Terrain3D's native ocean shader material")
 	check(original_ocean_material.shader.resource_path == "res://addons/terrain_3d/extras/shaders/ocean_shader.gdshader", "Use Terrain3D's ocean clipmap shader")
 	check(original_ocean_material.get_shader_parameter("sea_level") == 0.0, "Ocean uses world Y zero")
+	var shape_before_view_toggle = scene.heightmap.get_data()
+	scene.neutral_view.button_pressed = false
+	check(not scene.terrain.material.show_grey, "Colored terrain must remain selectable")
+	scene.neutral_view.button_pressed = true
+	check(scene.terrain.material.show_grey and scene.heightmap.get_data() == shape_before_view_toggle, "View toggles must preserve terrain geometry")
 	check(scene.terrain == original_terrain, "Startup must retain the authored Terrain3D node")
 	check(scene.get_children() == authored_children, "Runtime must not create or replace scene children")
 	check(scene.generate_button.pressed.is_connected(scene._generate), "Generate signal must be connected in the scene")
@@ -133,7 +142,7 @@ func _run() -> void:
 	var saved_water = load(folder.path_join("water_material.res")) as ShaderMaterial
 	check(saved_water != null and saved_water.shader.resource_path == "res://addons/terrain_3d/extras/shaders/ocean_shader.gdshader", "Saved water must retain Terrain3D native ocean shader")
 	var settings = JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("map.json")))
-	check(settings.generator_revision == 4 and settings.detail_strength == 1.0 and settings.seed == 12345 and settings.width == 256 and settings.length == 512, "Saved settings must match generated map")
+	check(settings.generator_revision == 5 and settings.relief_profile == 0 and settings.detail_strength == 1.0 and settings.seed == 12345 and settings.width == 256 and settings.length == 512, "Saved settings must match generated map")
 	check(DirAccess.get_files_at(folder.path_join("terrain")).size() == 2, "Save must write Terrain3D regions")
 	var previous = FileAccess.get_file_as_bytes(folder.path_join("heightmap.exr"))
 	scene._save(ProjectSettings.globalize_path(folder))

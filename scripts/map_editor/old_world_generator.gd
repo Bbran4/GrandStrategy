@@ -24,7 +24,7 @@ var neighbours: Array[PackedInt32Array] = []
 var columns: int
 var rows: int
 
-func generate(width: int, length: int, map_seed: int, detail_strength: float = 1.0, erosion_strength: float = 1.0) -> Image:
+func generate(width: int, length: int, map_seed: int, detail_strength: float = 1.0, erosion_strength: float = 1.0, relief_profile: int = 0) -> Image:
 	assert(width >= 64 and width <= 4096 and length >= 64 and length <= 4096)
 	rng.seed = map_seed
 	# Approximately 10k simulation cells, independent of output resolution.
@@ -70,7 +70,7 @@ func generate(width: int, length: int, map_seed: int, detail_strength: float = 1
 	# between the original recipe cells. Coordinates stay stable across resolutions.
 	image = _reconstruct_macro(image)
 	image.resize(width, length, Image.INTERPOLATE_CUBIC)
-	return HydraulicErosion.erode(_refine(image, map_seed, detail_strength), map_seed, erosion_strength)
+	return HydraulicErosion.erode(_refine(image, map_seed, detail_strength, relief_profile), map_seed, erosion_strength)
 
 func _number(value: String) -> float:
 	var parts = value.split("-")
@@ -192,7 +192,7 @@ func _smooth() -> void:
 		result[i] = floor((heights[i] + total / (neighbours[i].size() + 1)) / 2)
 	heights = result
 
-func _refine(base: Image, map_seed: int, strength: float) -> Image:
+func _refine(base: Image, map_seed: int, strength: float, relief_profile: int = 0) -> Image:
 	var ridges = FastNoiseLite.new()
 	ridges.seed = map_seed + 411
 	ridges.frequency = 0.012
@@ -202,11 +202,6 @@ func _refine(base: Image, map_seed: int, strength: float) -> Image:
 	ridges.domain_warp_enabled = true
 	ridges.domain_warp_amplitude = 38.0
 	ridges.domain_warp_frequency = 0.009
-	var structure = FastNoiseLite.new()
-	structure.seed = map_seed + 32171
-	structure.frequency = 0.009
-	structure.fractal_octaves = 4
-	structure.fractal_gain = 0.5
 	var spurs = FastNoiseLite.new()
 	spurs.seed = map_seed + 19489
 	spurs.frequency = 0.045
@@ -238,18 +233,18 @@ func _refine(base: Image, map_seed: int, strength: float) -> Image:
 			var a = lerpf(base.get_pixel(ix, iy).r, base.get_pixel(ix + 1, iy).r, sx - ix)
 			var b = lerpf(base.get_pixel(ix, iy + 1).r, base.get_pixel(ix + 1, iy + 1).r, sx - ix)
 			var h = clampf(lerpf(a, b, sy - iy), 0, 1)
-			# Reserve elevation headroom so new ridges do not clip into flat tops.
-			if h > 0.2: h = 0.2 + (h - 0.2) * 0.72
+			# Accepted reference variants: preserve the rugged relief, or soften it.
+			if relief_profile == 1 and h > 0.2: h = 0.2 + (h - 0.2) * 0.72
 			var mountain_mask = smoothstep(0.25, 0.65, h)
 			var land_mask = smoothstep(0.19, 0.27, h)
 			var ridge = ridges.get_noise_2d(px, py)
 			var grain = fine.get_noise_2d(px, py)
 			# Rebuild upland relief at output resolution, rather than merely adding
 			# tiny bumps to the enlarged continental hills.
-			var massif = pow(1.0 - absf(structure.get_noise_2d(px + wx * 45.0, py + wy * 45.0)), 3.0)
+			var massif = pow(clampf(ridge * 0.5 + 0.5, 0, 1), 1.7)
 			var spur = spurs.get_noise_2d(px, py) * 0.5 + 0.5
 			var upland = smoothstep(0.25, 0.52, h)
-			h = 0.2 + (h - 0.2) * lerpf(1.0, (0.25 + massif * 1.05) * (0.8 + spur * 0.2), upland * clampf(strength, 0.0, 1.0))
+			h += upland * ((massif * (0.55 + spur * 0.45) - 0.25) * 0.34) * strength
 			# Broad plains, incised ridges, and much finer foothill relief.
 			h += (ridge * (0.008 + mountain_mask * 0.065) * land_mask + grain * (0.002 + mountain_mask * 0.009) + wx * 0.003) * strength
 			if h > 0.2: h = 0.2 + pow((h - 0.2) / 0.8, 1.22) * 0.8

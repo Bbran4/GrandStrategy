@@ -4,6 +4,8 @@ const DefaultOceanMaterial = preload("res://addons/terrain_3d/extras/shaders/M_o
 
 const Appearance = preload("res://scripts/map_editor/terrain_appearance.gd")
 
+@export_enum("Rugged reference", "Softer reference") var relief_profile: int = 0
+
 @export_enum("Standard (1 sample/m)", "High (2 samples/m)") var heightmap_quality: int = 1
 @export_range(0.0, 2.0, 0.1) var erosion_strength: float = 1.0
 
@@ -13,6 +15,8 @@ const Generator = preload("res://scripts/map_editor/old_world_generator.gd")
 @onready var terrain: Terrain3D = $Terrain3D
 @onready var terrain_focus: Node3D = $TerrainFocus
 @onready var camera: Camera3D = $Camera3D
+@onready var profile_input: OptionButton = %ProfileInput
+@onready var neutral_view: CheckButton = %NeutralView
 @onready var quality_input: OptionButton = %QualityInput
 @onready var erosion_input: SpinBox = %ErosionInput
 @onready var width_input: SpinBox = %WidthInput
@@ -35,8 +39,16 @@ var pitch = 1.08
 var distance = 1400.0
 var dragging = false
 var panning = false
+var _colored_detail_strength: float = 1.0
+var _colored_bump_strength: float = 0.35
 
 func _ready() -> void:
+	profile_input.select(relief_profile)
+	var authored_detail = terrain.material.get_shader_param("surface_detail_strength")
+	var authored_bump = terrain.material.get_shader_param("detail_bump_strength")
+	if authored_detail != null: _colored_detail_strength = float(authored_detail)
+	if authored_bump != null: _colored_bump_strength = float(authored_bump)
+	_on_neutral_view_toggled(neutral_view.button_pressed)
 	quality_input.select(heightmap_quality)
 	erosion_input.value = erosion_strength
 	_configure_ocean()
@@ -46,23 +58,30 @@ func _ready() -> void:
 func _on_random_seed_pressed() -> void:
 	seed_input.value = randi() % 2147483647
 
+func _on_neutral_view_toggled(enabled: bool) -> void:
+	terrain.material.show_grey = enabled
+	terrain.material.set_shader_param("surface_detail_strength", 0.0 if enabled else _colored_detail_strength)
+	terrain.material.set_shader_param("detail_bump_strength", 0.0 if enabled else _colored_bump_strength)
+	if not generated_settings.is_empty(): generated_settings["neutral_relief"] = enabled
+
 func _on_save_pressed() -> void:
 	save_dialog.popup_centered_ratio(0.65)
 
 func _generate() -> void:
 	if busy: return
+	relief_profile = profile_input.selected
 	heightmap_quality = quality_input.selected
 	erosion_strength = erosion_input.value
 	busy = true
 	generate_button.disabled = true
 	save_button.disabled = true
 	status.text = "Generating Old World heightmap…"
-	var options = {"width": int(width_input.value), "length": int(length_input.value), "height_scale": height_input.value, "sea_level": sea_input.value / 100.0, "seed": int(seed_input.value), "template": "Old World", "generator_revision": 4, "detail_strength": detail_strength, "erosion_strength": erosion_strength, "samples_per_metre": 2 if heightmap_quality == 1 else 1}
+	var options = {"width": int(width_input.value), "length": int(length_input.value), "height_scale": height_input.value, "sea_level": sea_input.value / 100.0, "seed": int(seed_input.value), "template": "Old World", "generator_revision": 5, "relief_profile": relief_profile, "neutral_relief": neutral_view.button_pressed, "detail_strength": detail_strength, "erosion_strength": erosion_strength, "samples_per_metre": 2 if heightmap_quality == 1 else 1}
 	options["heightmap_width"] = options.width * options.samples_per_metre
 	options["heightmap_length"] = options.length * options.samples_per_metre
 	worker = Thread.new()
 	var error = worker.start(func():
-		var image = Generator.new().generate(options.heightmap_width, options.heightmap_length, options.seed, options.detail_strength, options.erosion_strength)
+		var image = Generator.new().generate(options.heightmap_width, options.heightmap_length, options.seed, options.detail_strength, options.erosion_strength, options.relief_profile)
 		return {"height": image, "color": Appearance.colorize(image, options)}
 	)
 	if error != OK:
