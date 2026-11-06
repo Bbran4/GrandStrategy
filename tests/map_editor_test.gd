@@ -63,6 +63,7 @@ func _run() -> void:
 	check(land > 1000 and water > 1000, "Old World must produce both land and sea")
 	print("Generator land fraction: ", float(land) / (land + water))
 	var scene = load("res://scenes/map_editor.tscn").instantiate()
+	scene.auto_import_provinces = false
 	check(scene.heightmap_quality == 1, "Scene should default to high elevation sampling")
 	scene.heightmap_quality = 0
 	# These nodes and settings must exist in the PackedScene before _ready runs.
@@ -95,7 +96,7 @@ func _run() -> void:
 	check(scene.terrain.ocean_enabled, "Terrain3D built-in ocean must be enabled")
 	var original_ocean_material = scene.terrain.ocean_material
 	check(original_ocean_material is ShaderMaterial, "The scene must use Terrain3D's native ocean shader material")
-	check(original_ocean_material.shader.resource_path == "res://addons/terrain_3d/extras/shaders/ocean_shader.gdshader", "Use Terrain3D's ocean clipmap shader")
+	check(original_ocean_material.shader.resource_path == "res://shaders/strategy_ocean.gdshader", "Use Terrain3D's ocean clipmap shader")
 	check(original_ocean_material.get_shader_parameter("sea_level") == 0.0, "Ocean uses world Y zero")
 	var shape_before_view_toggle = scene.heightmap.get_data()
 	scene.neutral_view.button_pressed = false
@@ -143,7 +144,7 @@ func _run() -> void:
 		check(saved_material.get_shader_param("detail_albedo") is Texture2DArray, "Saved terrain material must retain PBR detail textures")
 		scene.terrain.material = original_material
 	var saved_water = load(folder.path_join("water_material.res")) as ShaderMaterial
-	check(saved_water != null and saved_water.shader.resource_path == "res://addons/terrain_3d/extras/shaders/ocean_shader.gdshader", "Saved water must retain Terrain3D native ocean shader")
+	check(saved_water != null and saved_water.shader.resource_path == "res://shaders/strategy_ocean.gdshader", "Saved water must retain Terrain3D native ocean shader")
 	var settings = JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("map.json")))
 	check(settings.generator_revision == 5 and settings.relief_profile == 0 and settings.detail_strength == 1.0 and settings.seed == 12345 and settings.width == 256 and settings.length == 512, "Saved settings must match generated map")
 	check(DirAccess.get_files_at(folder.path_join("terrain")).size() == 2, "Save must write Terrain3D regions")

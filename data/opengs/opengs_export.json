@@ -1,0 +1,106 @@
+{
+	"boundary_mode": "unconstrained_white",
+	"export_version": 1,
+	"format": "OpenGS import images",
+	"height": 1024,
+	"heightmap_sha256": "0d1f04e22b69a6dbb463267b91e8973af15eb5bdb5415b683329be4f62dfedf1",
+	"orientation": "image x -> world +X, image y -> world +Z; no flip",
+	"source_settings": {
+		"detail_strength": 1.0,
+		"erosion_strength": 1.0,
+		"generator_revision": 5,
+		"height_scale": 100.0,
+		"heightmap_length": 1024,
+		"heightmap_width": 2048,
+		"length": 512,
+		"neutral_relief": false,
+		"relief_profile": 0,
+		"samples_per_metre": 2,
+		"sea_level": 0.2,
+		"seed": 12345,
+		"template": "Old World",
+		"width": 1024
+	},
+	"stats": {
+		"lake_count": 1,
+		"lake_pixels": 1533,
+		"land_pixels": 696752,
+		"ocean_pixels": 1398867
+	},
+	"terrain_counts": {
+		"deep_ocean": 1215508,
+		"desert": 26642,
+		"forest": 47472,
+		"hills": 206255,
+		"jungle": 12802,
+		"lakes": 1533,
+		"marsh": 4132,
+		"mountain": 344219,
+		"plains": 55230,
+		"shallow_sea": 183359
+	},
+	"terrain_palette_rgb": {
+		"deep_ocean": [
+			2,
+			38,
+			150
+		],
+		"desert": [
+			255,
+			127,
+			0
+		],
+		"fjords": [
+			75,
+			162,
+			198
+		],
+		"forest": [
+			89,
+			199,
+			85
+		],
+		"hills": [
+			248,
+			255,
+			153
+		],
+		"jungle": [
+			127,
+			191,
+			0
+		],
+		"lakes": [
+			58,
+			91,
+			255
+		],
+		"marsh": [
+			76,
+			96,
+			35
+		],
+		"mountain": [
+			157,
+			192,
+			208
+		],
+		"plains": [
+			255,
+			129,
+			66
+		],
+		"shallow_sea": [
+			56,
+			118,
+			217
+		],
+		"urban": [
+			120,
+			120,
+			120
+		]
+	},
+	"water_connectivity": 4,
+	"width": 2048
+}

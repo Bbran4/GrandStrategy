@@ -1,5 +1,10 @@
 extends Node3D
 
+const ProvinceImporter = preload("res://scripts/provinces/opengs_importer.gd")
+const StrategyOceanShader = preload("res://shaders/strategy_ocean.gdshader")
+@export_dir var opengs_import_directory: String = "res://data/opengs"
+@export var auto_import_provinces: bool = true
+
 const DefaultOceanMaterial = preload("res://addons/terrain_3d/extras/shaders/M_ocean.tres")
 
 const OpenGSExporter = preload("res://scripts/map_editor/opengs_exporter.gd")
@@ -14,6 +19,18 @@ const Appearance = preload("res://scripts/map_editor/terrain_appearance.gd")
 @export_range(0.0, 2.0, 0.1) var detail_strength: float = 1.0
 
 const Generator = preload("res://scripts/map_editor/old_world_generator.gd")
+@onready var provinces = $Provinces
+@onready var province_import_button: Button = %ProvinceImportButton
+@onready var province_import_dialog: FileDialog = $EditorUI/ProvinceImportDialog
+@onready var province_mode: OptionButton = %ProvinceMode
+@onready var province_borders: CheckButton = %ProvinceBorders
+@onready var province_clear: Button = %ProvinceClearButton
+@onready var province_panel: PanelContainer = $EditorUI/ProvincePanel
+@onready var province_info: Label = %ProvinceInfo
+@onready var province_hover: Label = %ProvinceHover
+@onready var province_owner: LineEdit = %ProvinceOwner
+@onready var province_owner_color: ColorPickerButton = %ProvinceOwnerColor
+@onready var province_owner_apply: Button = %ProvinceOwnerApply
 @onready var terrain: Terrain3D = $Terrain3D
 @onready var terrain_focus: Node3D = $TerrainFocus
 @onready var camera: Camera3D = $Camera3D
@@ -63,7 +80,9 @@ func _on_random_seed_pressed() -> void:
 	seed_input.value = randi() % 2147483647
 
 func _on_neutral_view_toggled(enabled: bool) -> void:
-	terrain.material.show_grey = enabled
+	terrain.material.show_grey = enabled and provinces.map_data == null
+	terrain.material.set_shader_param("province_neutral_base", enabled)
+	provinces._set_uniform("province_neutral_base", enabled)
 	terrain.material.set_shader_param("surface_detail_strength", 0.0 if enabled else _colored_detail_strength)
 	terrain.material.set_shader_param("detail_bump_strength", 0.0 if enabled else _colored_bump_strength)
 	if not generated_settings.is_empty(): generated_settings["neutral_relief"] = enabled
@@ -76,6 +95,7 @@ func _export_opengs(folder: String) -> void:
 	if busy or heightmap == null: return
 	busy = true
 	generate_button.disabled = true
+	province_import_button.disabled = true
 	save_button.disabled = true
 	opengs_button.disabled = true
 	status.text = "Exporting OpenGS land, boundary, density and terrain images…"
@@ -97,8 +117,100 @@ func _export_opengs(folder: String) -> void:
 			status.text = result.error
 	busy = false
 	generate_button.disabled = false
+	province_import_button.disabled = heightmap == null
 	save_button.disabled = false
 	opengs_button.disabled = false
+
+func _on_province_import_pressed() -> void:
+	if busy or heightmap == null: return
+	province_import_dialog.current_dir = ProjectSettings.globalize_path(opengs_import_directory)
+	province_import_dialog.popup_centered_ratio(0.65)
+
+func _try_default_provinces() -> void:
+	if not auto_import_provinces or busy: return
+	for name in ["provinces.png", "province_map.png", "province.png", "province_image.png"]:
+		if FileAccess.file_exists(opengs_import_directory.path_join(name)):
+			_import_provinces(ProjectSettings.globalize_path(opengs_import_directory))
+			return
+
+func _import_provinces(folder: String) -> void:
+	if busy or heightmap == null: return
+	busy = true
+	generate_button.disabled = true
+	province_import_button.disabled = true
+	save_button.disabled = true
+	opengs_button.disabled = true
+	status.text = "Importing OpenGS provinces, territory membership and shared borders…"
+	var source_image = heightmap
+	var source_settings = generated_settings.duplicate(true)
+	worker = Thread.new()
+	var error = worker.start(func(): return ProvinceImporter.load_folder(folder, source_image, source_settings))
+	if error != OK:
+		worker = null
+		status.text = "Could not start province import: " + error_string(error)
+	else:
+		while worker.is_alive(): await get_tree().process_frame
+		var result: Dictionary = worker.wait_to_finish()
+		worker = null
+		if not result.error.is_empty():
+			status.text = result.error
+		else:
+			provinces.apply_data(result.data)
+			province_mode.select(2)
+			province_mode.disabled = false
+			province_borders.disabled = false
+			province_clear.disabled = false
+			_on_province_mode_selected(2)
+			_on_neutral_view_toggled(neutral_view.button_pressed)
+			status.text = "Imported %d provinces and %d territories." % [result.data.provinces.size() - 1, result.data.territories.size() - 1]
+			for warning in result.data.warnings: status.text += "\n" + warning
+	busy = false
+	generate_button.disabled = false
+	province_import_button.disabled = false
+	save_button.disabled = false
+	opengs_button.disabled = false
+
+func _clear_provinces() -> void:
+	if busy: return
+	_clear_province_data()
+	status.text = "Province map cleared. Terrain is unchanged."
+
+func _clear_province_data() -> void:
+	provinces.apply_data(null)
+	province_mode.select(0)
+	province_mode.disabled = true
+	province_borders.disabled = true
+	province_clear.disabled = true
+	_on_neutral_view_toggled(neutral_view.button_pressed)
+
+func _on_province_mode_selected(index: int) -> void:
+	provinces.set_view_mode(index)
+
+func _on_province_borders_toggled(enabled: bool) -> void:
+	provinces.borders_enabled = enabled
+	provinces.set_view_mode(province_mode.selected)
+
+func _on_province_hovered(index: int) -> void:
+	province_hover.text = "Hover: " + provinces.map_data.provinces[index].id if index > 0 and provinces.map_data != null else "Hover: —"
+
+func _on_province_selected(index: int) -> void:
+	province_panel.visible = provinces.map_data != null
+	province_owner_apply.disabled = index == 0
+	if index == 0:
+		province_info.text = "Click a province to inspect it."
+		province_owner.text = ""
+		return
+	var record = provinces.map_data.provinces[index]
+	province_owner.text = record.owner
+	province_owner_color.color = Color.from_string(record.owner_color, Color("c9a05a"))
+	province_info.text = "%s\nTerritory: %s\nType: %s · Terrain: %s\nArea: %.1f m²\nOwner: %s\nNeighbours (%d): %s" % [record.id, record.territory_id, record.type, record.terrain if not record.terrain.is_empty() else "not supplied", record.area_m2, record.owner if not record.owner.is_empty() else "unassigned", record.neighbours.size(), ", ".join(record.neighbours.slice(0, 12))]
+
+func _on_province_owner_apply() -> void:
+	if busy: return
+	if provinces.set_province_owner(province_owner.text, province_owner_color.color):
+		province_mode.select(3)
+		_on_province_mode_selected(3)
+		status.text = "Province ownership updated; province geometry is unchanged."
 
 func _on_save_pressed() -> void:
 	save_dialog.popup_centered_ratio(0.65)
@@ -110,6 +222,7 @@ func _generate() -> void:
 	erosion_strength = erosion_input.value
 	busy = true
 	generate_button.disabled = true
+	province_import_button.disabled = true
 	save_button.disabled = true
 	opengs_button.disabled = true
 	status.text = "Generating Old World heightmap…"
@@ -124,6 +237,7 @@ func _generate() -> void:
 	if error != OK:
 		busy = false
 		generate_button.disabled = false
+		province_import_button.disabled = heightmap == null
 		opengs_button.disabled = heightmap == null
 		save_button.disabled = heightmap == null
 		status.text = "Could not start generator: " + error_string(error)
@@ -137,10 +251,13 @@ func _generate() -> void:
 	_import(result.height, result.color, options)
 	busy = false
 	generate_button.disabled = false
+	province_import_button.disabled = heightmap == null
 	save_button.disabled = false
 	opengs_button.disabled = false
+	call_deferred("_try_default_provinces")
 
 func _import(image: Image, colors: Image, options: Dictionary) -> void:
+	_clear_province_data()
 	# Keep the authored Terrain3D node, material, assets and inspector settings.
 	# Only replace its map regions, using Terrain3D's supported data API.
 	for region: Terrain3DRegion in terrain.data.get_regions_active():
@@ -166,6 +283,7 @@ func _configure_ocean() -> void:
 	# Keep the inspector material; only supply a fallback if it was cleared.
 	if terrain.ocean_material == null:
 		terrain.ocean_material = DefaultOceanMaterial.duplicate(true)
+		terrain.ocean_material.shader = StrategyOceanShader
 	terrain.ocean_enabled = true
 	var water_material = terrain.ocean_material as ShaderMaterial
 	if water_material != null and water_material.shader != null:
@@ -229,11 +347,18 @@ func _save(folder: String) -> void:
 	if error != OK:
 		status.text = "Could not save map materials: " + error_string(error)
 		return
+	if provinces.map_data != null:
+		error = provinces.map_data.save_to_folder(folder.path_join("provinces"))
+		if error != OK:
+			status.text = "Could not save province package: " + error_string(error)
+			return
 	var file = FileAccess.open(folder.path_join("map.json"), FileAccess.WRITE)
 	if file == null:
 		status.text = "Could not save map settings."
 		return
-	file.store_string(JSON.stringify(generated_settings, "\t"))
+	var saved_settings = generated_settings.duplicate(true)
+	saved_settings["province_package"] = "provinces" if provinces.map_data != null else ""
+	file.store_string(JSON.stringify(saved_settings, "\t"))
 	status.text = "Saved heightmap, settings, terrain and materials to:\n" + folder
 
 func _exit_tree() -> void:

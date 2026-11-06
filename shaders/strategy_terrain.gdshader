@@ -57,6 +57,8 @@ uniform float ground_detail_scale : hint_range(0.01, 1.0) = 0.045;
 uniform float detail_bump_strength : hint_range(0.0, 1.0) = 0.35;
 group_uniforms;
 
+#include "res://shaders/province_overlay.gdshaderinc"
+
 // Varyings & Types
 // Some are required for editor functions
 varying vec3 v_vertex;
@@ -312,4 +314,5 @@ void fragment() {
 	ROUGHNESS = clamp(mix(0.92, normal_rough.z, amount), 0.65, 1.0);
 	SPECULAR = mix(0.1, 0.23, rock_mask);
 	AO = mix(1.0, 0.76 + detail_tex.a * 0.24, amount * rock_mask);
+	ALBEDO = province_apply(v_vertex.xz, ALBEDO);
 }

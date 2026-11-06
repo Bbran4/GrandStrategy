@@ -239,8 +239,8 @@ Planned workflow: derive a coastline/land mask from the finished terrain, author
 provinces in OpenGS, then import its province image and JSON data into Godot.
 Terrain3D remains the terrain renderer. Province IDs, adjacency, selection,
 ownership and political overlays belong to the game's province system.
-OpenGS input-image export is implemented in the runtime map editor. Importing
-generated OpenGS province images and province data back into Godot is still planned. No province plugin is being substituted for Terrain3D.
+OpenGS input-image export and province/territory import are implemented in the
+runtime map editor, including selection, adjacency, political views and saved ownership. No province plugin is being substituted for Terrain3D.
 
 ## Accepted terrain references — revision 5
 
@@ -342,3 +342,120 @@ protection. The full map-editor suite also verifies scene-authored export
 controls, background-worker locking and use of generated rather than edited
 settings. Files are validated against the documented image contract; an actual
 OpenGS application import has not been exercised by these tests.
+
+## Import OpenGS provinces into the game
+
+The default input folder is **`data/opengs/`**. Your current exports contain
+**500 provinces and 260 territories** and have been exercised in Godot 4.7.2.
+The source manifest copied from `data/opengs_export.json` matches the generated
+heightmap hash, resolution, sea level and physical dimensions.
+
+Export these **raw flat-color PNGs** from OpenGS into that folder:
+
+- `province.png` (also accepts `provinces.png`, `province_map.png`, or `province_image.png`)
+- `territory.png` (also accepts `territories.png`, `territory_map.png`, or `territory_image.png`)
+
+Keep only one filename variant for each map. These are OpenGS **output** maps,
+not the input `land.png`, `terrain.png`, or a screenshot with borders and labels.
+Images must be opaque, lossless PNGs at exactly the generated heightmap size;
+they are never resized, filtered, flipped or recolored during import. Black is
+reserved for unassigned pixels. Province/territory coverage must agree.
+
+Optional but recommended metadata, using OpenGS's JSON exports:
+
+- `province_definitions.json`: original province IDs, RGB values, type and terrain.
+- `territory_definitions.json`: original territory IDs, RGB values and type.
+- `territory_history.json`: explicit territory-to-province membership.
+- `opengs_export.json`: the source manifest from our input-image export pack.
+
+Definitions also accept `province_data.json` / `provinces.json` and
+`territory_data.json` / `territories.json`; avoid duplicate variants. JSON schema
+reference: https://github.com/Thomas-Holtvedt/opengs-maptool/blob/main/docs/data_export_format.md.
+Without definitions, each RGB color receives a deterministic ID such as
+`PRV_C80A14`, land/water is inferred from the underlying heightmap, and terrain
+metadata remains unspecified. With definitions, unknown colors are rejected,
+which also catches antialiased or mismatched images. There is a 65,535-region
+limit per layer and a 32 MB limit on individual JSON files.
+
+### Run and inspect
+
+Press **F5**. After terrain generation, the editor automatically loads the
+exports from `data/opengs/` if present. Auto-import and its folder are exposed on
+the MapEditor root in the Inspector. **Import OpenGS provinces…** can load a
+different folder. Parsing, validation, adjacency and border-distance generation
+run on a worker; only the completed, valid map replaces the current province data.
+A failed import keeps the previous active map. Regenerating terrain clears stale
+province data before attempting to load the default folder again; a mismatched
+source manifest is rejected instead of silently misaligning provinces.
+
+The map-mode dropdown offers:
+
+- **Terrain + borders**: retain the terrain/neutral relief beneath border lines.
+- **Province view**: individual province colors.
+- **Territory view**: parent-territory colors, with thicker territory boundaries.
+- **Country ownership**: country colors, thin province lines and thicker ownership boundaries.
+
+Water retains its ocean appearance. Borders and selection also render on the
+existing Terrain3D ocean clipmap. `strategy_ocean.gdshader` adapts the shipped
+ocean shader with the same overlay include; no separate ocean mesh is created.
+Province identities use nearest-sampled, non-color ID textures. Separate
+bilinearly sampled distance fields smooth visible borders without changing IDs.
+Each color is one logical province, including any disconnected pieces present
+in the source image; the importer does not silently split or repair those shapes.
+
+Hover highlights a province. Click it to select it and inspect its original ID,
+territory, terrain type, area, ownership and shared-edge neighbours. Picking uses
+world XZ coordinates and the actual sample spacing, and prefers the visible
+water surface over submerged seabed. The **Show province borders** toggle hides
+or shows borders; **Clear imported provinces** removes the imported layer while
+retaining the generated terrain. All controls and the Provinces controller node
+are authored into `scenes/map_editor.tscn`.
+
+### Territory membership and adjacency
+
+Land/ocean provinces crossing territory boundaries are rejected. OpenGS can,
+however, make one province for an entire lake even when its territory raster
+splits that water body. For these water provinces we choose the parent from
+territory history if supplied, otherwise the province's source center, otherwise
+the largest overlap. The in-game territory ID raster is normalized so the whole
+province has one parent. Original PNGs are retained, and a notice reports this
+normalization. Your current lake province exercises this case.
+
+Province adjacency is derived from shared horizontal/vertical pixel edges;
+corner contact alone does not create a neighbour. Shared-border lengths and
+areas use actual world spacing. This graph includes land/water interfaces;
+army/naval movement and passability rules are not implemented yet.
+
+### Country ownership and saving
+
+Select a province, enter a country ID, choose a color, and press
+**Assign country / clear ownership**. New countries use the chosen color. Joining
+an existing country keeps its color. To recolor that country, select a province
+already owned by it and apply a new color without changing its country ID.
+Leaving the ID blank clears ownership of the selected province. Ownership is
+separate from province/territory identity and does not modify terrain or province
+geometry. Territories are administrative groups, not automatically generated nations.
+
+**Save heightmap + terrain…** now includes a `provinces/` package when a province
+map is loaded. It stores original PNGs, definitions, canonical territory history,
+exact ID rasters, source manifest and `province_state.json` containing records,
+adjacency, areas and ownership. `map.json` points to that package. Re-import the
+saved `provinces/` folder over its matching source terrain to restore it, including
+country ownership. Full saved-world loading, country simulation, armies, economy,
+province labels and OpenGS CSV/YAML/XML metadata import are not part of this pass.
+
+### Province verification
+
+```powershell
+godot --headless --path . --script res://tests/province_import_test.gd
+godot --path . --script res://tests/province_scene_test.gd
+godot --path . --script res://tests/province_preview.gd
+```
+
+The first uses documented-schema synthetic fixtures for identities, hierarchy,
+shared-border adjacency, world coordinates, malformed imports, lake normalization
+and save/re-import. The second exercises the actual scene, terrain preservation,
+selection, political shader bindings on land/ocean, far-camera picking, ownership,
+saving, failed-import recovery and regeneration. The third auto-loads the actual
+files in `data/opengs/` and writes territory/province screenshots under
+`tests/output/`. Existing map-editor and OpenGS-export tests remain available.
