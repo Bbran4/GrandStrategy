@@ -2,6 +2,8 @@ extends Node3D
 
 const DefaultOceanMaterial = preload("res://addons/terrain_3d/extras/shaders/M_ocean.tres")
 
+const OpenGSExporter = preload("res://scripts/map_editor/opengs_exporter.gd")
+
 const Appearance = preload("res://scripts/map_editor/terrain_appearance.gd")
 
 @export_enum("Rugged reference", "Softer reference") var relief_profile: int = 0
@@ -25,6 +27,8 @@ const Generator = preload("res://scripts/map_editor/old_world_generator.gd")
 @onready var sea_input: SpinBox = %SeaInput
 @onready var seed_input: SpinBox = %SeedInput
 @onready var generate_button: Button = %GenerateButton
+@onready var opengs_button: Button = %OpenGSExportButton
+@onready var opengs_dialog: FileDialog = $EditorUI/OpenGSExportDialog
 @onready var save_button: Button = %SaveButton
 @onready var status: Label = %Status
 @onready var preview: TextureRect = %Preview
@@ -64,6 +68,38 @@ func _on_neutral_view_toggled(enabled: bool) -> void:
 	terrain.material.set_shader_param("detail_bump_strength", 0.0 if enabled else _colored_bump_strength)
 	if not generated_settings.is_empty(): generated_settings["neutral_relief"] = enabled
 
+func _on_opengs_export_pressed() -> void:
+	if busy or heightmap == null: return
+	opengs_dialog.popup_centered_ratio(0.65)
+
+func _export_opengs(folder: String) -> void:
+	if busy or heightmap == null: return
+	busy = true
+	generate_button.disabled = true
+	save_button.disabled = true
+	opengs_button.disabled = true
+	status.text = "Exporting OpenGS land, boundary, density and terrain images…"
+	# Use the last generated map, not subsequently edited input controls.
+	var source_image = heightmap
+	var source_settings = generated_settings.duplicate(true)
+	worker = Thread.new()
+	var error = worker.start(func(): return OpenGSExporter.export_folder(folder, source_image, source_settings))
+	if error != OK:
+		worker = null
+		status.text = "Could not start export: " + error_string(error)
+	else:
+		while worker.is_alive(): await get_tree().process_frame
+		var result: Dictionary = worker.wait_to_finish()
+		worker = null
+		if result.error.is_empty():
+			status.text = "OpenGS images exported. Boundary is unconstrained.\n" + folder
+		else:
+			status.text = result.error
+	busy = false
+	generate_button.disabled = false
+	save_button.disabled = false
+	opengs_button.disabled = false
+
 func _on_save_pressed() -> void:
 	save_dialog.popup_centered_ratio(0.65)
 
@@ -75,6 +111,7 @@ func _generate() -> void:
 	busy = true
 	generate_button.disabled = true
 	save_button.disabled = true
+	opengs_button.disabled = true
 	status.text = "Generating Old World heightmap…"
 	var options = {"width": int(width_input.value), "length": int(length_input.value), "height_scale": height_input.value, "sea_level": sea_input.value / 100.0, "seed": int(seed_input.value), "template": "Old World", "generator_revision": 5, "relief_profile": relief_profile, "neutral_relief": neutral_view.button_pressed, "detail_strength": detail_strength, "erosion_strength": erosion_strength, "samples_per_metre": 2 if heightmap_quality == 1 else 1}
 	options["heightmap_width"] = options.width * options.samples_per_metre
@@ -87,6 +124,8 @@ func _generate() -> void:
 	if error != OK:
 		busy = false
 		generate_button.disabled = false
+		opengs_button.disabled = heightmap == null
+		save_button.disabled = heightmap == null
 		status.text = "Could not start generator: " + error_string(error)
 		return
 	# Poll on the main thread. Scene-tree / Terrain3D operations stay here.
@@ -99,6 +138,7 @@ func _generate() -> void:
 	busy = false
 	generate_button.disabled = false
 	save_button.disabled = false
+	opengs_button.disabled = false
 
 func _import(image: Image, colors: Image, options: Dictionary) -> void:
 	# Keep the authored Terrain3D node, material, assets and inspector settings.

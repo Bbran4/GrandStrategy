@@ -239,8 +239,8 @@ Planned workflow: derive a coastline/land mask from the finished terrain, author
 provinces in OpenGS, then import its province image and JSON data into Godot.
 Terrain3D remains the terrain renderer. Province IDs, adjacency, selection,
 ownership and political overlays belong to the game's province system.
-This is a recorded project decision; the OpenGS export/import integration is
-not implemented yet. No province plugin is being substituted for Terrain3D.
+OpenGS input-image export is implemented in the runtime map editor. Importing
+generated OpenGS province images and province data back into Godot is still planned. No province plugin is being substituted for Terrain3D.
 
 ## Accepted terrain references — revision 5
 
@@ -264,3 +264,81 @@ to capture the softer variant. The preview camera differs between references,
 while both use the same physical dimensions, seed, sampling and height scale.
 
 The user-selected visual targets are preserved in [rugged-target.png](docs/terrain-references/rugged-target.png) and [softer-target.png](docs/terrain-references/softer-target.png). Compare future terrain changes against these before replacing the defaults.
+
+## Export images for OpenGS
+
+Generate a map, click **Export OpenGS images…**, and choose an empty folder.
+The exporter uses the last generated heightmap and its settings; editing the
+controls without generating does not change the exported world. Image building
+and writing run on a worker thread, and generation/saving are locked until the
+export finishes. Occupied folders are rejected.
+
+The pack contains four opaque, lossless RGB PNGs at the heightmap resolution:
+
+| File | Contents |
+| --- | --- |
+| `land.png` | White land; ocean `(5,20,18)`; lakes `(0,255,0)` |
+| `boundary.png` | White everywhere: no predefined country/state constraints |
+| `density.png` | Grayscale suitability: darker lowlands attract more seeds; lighter rugged/arid terrain attracts fewer |
+| `terrain.png` | Exact OpenGS terrain labels, without interpolation or anti-aliasing |
+
+Water below the generated sea level is ocean if connected to a map edge using
+four-neighbour connectivity; other water bodies become lakes. Classification is
+relative to the exported map extent. Pixels exactly at sea level are land.
+
+**Boundary limitations:** there are no authored country/state borders in this
+editor yet, so the boundary file intentionally imposes no constraints. It may
+be omitted in OpenGS, or edited externally to add exact-black `(0,0,0)` borders
+on the same white image. Mountains are not automatically treated as mandatory
+political boundaries. OpenGS still generates territories and provinces from the
+land image without predefined administrative borders.
+
+Terrain labels use these RGB codes from the
+[OpenGS usage instructions](https://github.com/Thomas-Holtvedt/opengs-maptool#how-to-use-the-tool):
+
+| Terrain | RGB |
+| --- | --- |
+| forest | 89, 199, 85 |
+| hills | 248, 255, 153 |
+| mountain | 157, 192, 208 |
+| plains | 255, 129, 66 |
+| urban | 120, 120, 120 |
+| jungle | 127, 191, 0 |
+| marsh | 76, 96, 35 |
+| desert | 255, 127, 0 |
+| deep_ocean | 2, 38, 150 |
+| shallow_sea | 56, 118, 217 |
+| fjords | 75, 162, 198 |
+| lakes | 58, 91, 255 |
+
+Land classification is a deterministic elevation/slope/moisture/latitude
+heuristic using the generated seed, physical height scale and vertex spacing.
+Mountain/hill classifications take precedence over vegetation. Urban and fjord
+labels are reserved for future authoring; they are not inferred from noise.
+Density is a suitability estimate, not population or a simulated economy.
+Ocean density is uniform (175); lake density is white (255), since OpenGS makes
+individual lake provinces. OpenGS exposes an **Exclude Ocean** density option.
+
+Load the images into their matching OpenGS tabs, generate **territories first**,
+then **provinces**. All four share orientation: image x maps to world +X, image y
+to world +Z, with no flip. Do not resize the images independently, recolor the
+label maps, or convert them to JPEG. High 2x sampling exports twice the physical
+map dimensions per image axis, and does not enlarge the world.
+
+The exporter also writes `README.txt` with import instructions and
+`opengs_export.json` with source settings, resolution, water counts, palette,
+orientation and a SHA-256 of the source height data. The neutral/color terrain
+view toggle has no effect on these data maps.
+
+Verify the raster exporter with:
+
+```powershell
+godot --headless --path . --script res://tests/opengs_export_test.gd
+```
+
+This checks exact colors, rectangular dimensions, four-neighbour lake detection,
+density direction, PNG byte round-trips, all-land/all-ocean inputs and overwrite
+protection. The full map-editor suite also verifies scene-authored export
+controls, background-worker locking and use of generated rather than edited
+settings. Files are validated against the documented image contract; an actual
+OpenGS application import has not been exercised by these tests.

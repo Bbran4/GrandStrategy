@@ -67,7 +67,7 @@ func _run() -> void:
 	scene.heightmap_quality = 0
 	# These nodes and settings must exist in the PackedScene before _ready runs.
 	check(scene.get_node_or_null("Terrain3D") is Terrain3D, "Terrain3D must be authored in the scene")
-	for path in ["WorldEnvironment", "Sun", "Camera3D", "TerrainFocus", "EditorUI/SettingsPanel", "EditorUI/SaveDialog"]:
+	for path in ["WorldEnvironment", "Sun", "Camera3D", "TerrainFocus", "EditorUI/SettingsPanel", "EditorUI/SaveDialog", "EditorUI/OpenGSExportDialog"]:
 		check(scene.has_node(path), "Scene must contain " + path + " before runtime")
 	check(scene.get_node("WorldEnvironment").environment.ambient_light_source == Environment.AMBIENT_SOURCE_COLOR, "Authored environment must use color ambient light")
 	check(scene.get_node("%HeightInput").value == 100.0, "Default relief scale must match accepted previews")
@@ -106,6 +106,9 @@ func _run() -> void:
 	check(scene.get_children() == authored_children, "Runtime must not create or replace scene children")
 	check(scene.generate_button.pressed.is_connected(scene._generate), "Generate signal must be connected in the scene")
 	check(scene.save_dialog.dir_selected.is_connected(scene._save), "Save dialog signal must be connected in the scene")
+	check(scene.opengs_button.pressed.is_connected(scene._on_opengs_export_pressed), "OpenGS button signal must be authored in the scene")
+	check(scene.opengs_dialog.dir_selected.is_connected(scene._export_opengs), "OpenGS folder dialog must be connected in the scene")
+	check(not scene.opengs_button.disabled, "OpenGS export must enable after generation")
 	var expected_regions = int(scene.generated_settings.heightmap_width / 256) * int(scene.generated_settings.heightmap_length / 256)
 	check(scene.terrain.data.get_regions_active().size() == expected_regions, "Initial map must contain the expected regions")
 	scene.width_input.value = 256
@@ -147,6 +150,21 @@ func _run() -> void:
 	var previous = FileAccess.get_file_as_bytes(folder.path_join("heightmap.exr"))
 	scene._save(ProjectSettings.globalize_path(folder))
 	check(previous == FileAccess.get_file_as_bytes(folder.path_join("heightmap.exr")), "Nonempty map folders must not be overwritten")
+	var export_folder = "res://tests/output/opengs_scene_" + str(Time.get_ticks_usec())
+	DirAccess.make_dir_recursive_absolute(export_folder)
+	var before_export = scene.heightmap.get_data()
+	scene._export_opengs(ProjectSettings.globalize_path(export_folder))
+	check(scene.busy and scene.opengs_button.disabled and scene.generate_button.disabled and scene.save_button.disabled, "OpenGS export must lock mutations until its worker finishes")
+	scene._generate()
+	while scene.busy: await process_frame
+	check(scene.heightmap.get_data() == before_export, "OpenGS export must preserve current terrain")
+	check(not scene.opengs_button.disabled and not scene.generate_button.disabled and not scene.save_button.disabled, "OpenGS export must restore controls")
+	var export_metadata = JSON.parse_string(FileAccess.get_file_as_string(export_folder.path_join("opengs_export.json")))
+	check(export_metadata.source_settings.seed == 12345 and export_metadata.source_settings.sea_level == 0.25 and export_metadata.source_settings.height_scale == 500, "OpenGS export must use generated settings rather than edited controls")
+	check(Image.load_from_file(export_folder.path_join("land.png")).get_size() == scene.heightmap.get_size(), "Runtime OpenGS export must use the heightmap resolution")
+	scene._export_opengs(ProjectSettings.globalize_path(export_folder))
+	while scene.busy: await process_frame
+	check(scene.status.text.contains("empty folder") and not scene.opengs_button.disabled, "Export errors must be shown and controls restored")
 	# Regression: a StandardMaterial3D used to cast to Nil and crash _import.
 	scene.terrain.ocean_material = StandardMaterial3D.new()
 	scene.generate_button.pressed.emit()
