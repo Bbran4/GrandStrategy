@@ -4,12 +4,17 @@ const DefaultOceanMaterial = preload("res://addons/terrain_3d/extras/shaders/M_o
 
 const Appearance = preload("res://scripts/map_editor/terrain_appearance.gd")
 
+@export_enum("Standard (1 sample/m)", "High (2 samples/m)") var heightmap_quality: int = 1
+@export_range(0.0, 2.0, 0.1) var erosion_strength: float = 1.0
+
 @export_range(0.0, 2.0, 0.1) var detail_strength: float = 1.0
 
 const Generator = preload("res://scripts/map_editor/old_world_generator.gd")
 @onready var terrain: Terrain3D = $Terrain3D
 @onready var terrain_focus: Node3D = $TerrainFocus
 @onready var camera: Camera3D = $Camera3D
+@onready var quality_input: OptionButton = %QualityInput
+@onready var erosion_input: SpinBox = %ErosionInput
 @onready var width_input: SpinBox = %WidthInput
 @onready var length_input: SpinBox = %LengthInput
 @onready var height_input: SpinBox = %HeightInput
@@ -32,6 +37,8 @@ var dragging = false
 var panning = false
 
 func _ready() -> void:
+	quality_input.select(heightmap_quality)
+	erosion_input.value = erosion_strength
 	_configure_ocean()
 	terrain.set_camera(camera)
 	_generate()
@@ -44,14 +51,18 @@ func _on_save_pressed() -> void:
 
 func _generate() -> void:
 	if busy: return
+	heightmap_quality = quality_input.selected
+	erosion_strength = erosion_input.value
 	busy = true
 	generate_button.disabled = true
 	save_button.disabled = true
 	status.text = "Generating Old World heightmap…"
-	var options = {"width": int(width_input.value), "length": int(length_input.value), "height_scale": height_input.value, "sea_level": sea_input.value / 100.0, "seed": int(seed_input.value), "template": "Old World", "generator_revision": 2, "detail_strength": detail_strength}
+	var options = {"width": int(width_input.value), "length": int(length_input.value), "height_scale": height_input.value, "sea_level": sea_input.value / 100.0, "seed": int(seed_input.value), "template": "Old World", "generator_revision": 4, "detail_strength": detail_strength, "erosion_strength": erosion_strength, "samples_per_metre": 2 if heightmap_quality == 1 else 1}
+	options["heightmap_width"] = options.width * options.samples_per_metre
+	options["heightmap_length"] = options.length * options.samples_per_metre
 	worker = Thread.new()
 	var error = worker.start(func():
-		var image = Generator.new().generate(options.width, options.length, options.seed, options.detail_strength)
+		var image = Generator.new().generate(options.heightmap_width, options.heightmap_length, options.seed, options.detail_strength, options.erosion_strength)
 		return {"height": image, "color": Appearance.colorize(image, options)}
 	)
 	if error != OK:
@@ -76,6 +87,7 @@ func _import(image: Image, colors: Image, options: Dictionary) -> void:
 	for region: Terrain3DRegion in terrain.data.get_regions_active():
 		terrain.data.remove_region(region, false)
 	terrain.data.update_maps(Terrain3DRegion.TYPE_MAX, true, false)
+	terrain.vertex_spacing = 1.0 / options.samples_per_metre
 	var sea = float(options.sea_level)
 	# Use floating-point heights directly; avoid 8-bit PNG terracing.
 	terrain.data.import_images([image, null, colors], Vector3.ZERO, -sea * options.height_scale, options.height_scale)
@@ -88,7 +100,7 @@ func _import(image: Image, colors: Image, options: Dictionary) -> void:
 	generated_settings = options.duplicate()
 	preview.texture = ImageTexture.create_from_image(colors)
 	_frame_map()
-	status.text = "%d × %d · seed %d\nTerrain ready. Changes apply on Generate." % [options.width, options.length, options.seed]
+	status.text = "%d × %d m · seed %d\n%d × %d height samples.\nTerrain ready." % [options.width, options.length, options.seed, options.heightmap_width, options.heightmap_length]
 
 func _configure_ocean() -> void:
 	# Terrain3D owns the ocean clipmap and passes it mesh/camera uniforms.

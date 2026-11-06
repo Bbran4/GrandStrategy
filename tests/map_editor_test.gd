@@ -14,6 +14,33 @@ func check(condition: bool, message: String) -> void:
 
 func _run() -> void:
 	var generator = Generator.new()
+	var test_slope = Image.create_empty(32, 32, false, Image.FORMAT_RF)
+	test_slope.fill(Color(0.3, 0, 0))
+	test_slope.set_pixel(16, 16, Color(0.8, 0, 0))
+	var weathered = generator._erode(test_slope, 1.0)
+	var old_mass = 0.0
+	var new_mass = 0.0
+	for y in 32:
+		for x in 32:
+			old_mass += test_slope.get_pixel(x, y).r
+			new_mass += weathered.get_pixel(x, y).r
+	check(absf(old_mass - new_mass) < 0.002, "Weathering must conserve terrain material")
+	check(weathered.get_pixel(16, 16).r < 0.8 and weathered.get_pixel(15, 16).r > 0.3, "Steep terrain must deposit material downhill")
+	var lowland = Image.create_empty(32, 32, false, Image.FORMAT_RF)
+	lowland.fill(Color(0.21, 0, 0))
+	check(generator._erode(lowland, 1.0).get_data() == lowland.get_data(), "Weathering must preserve the shoreline band")
+	var hydraulic = preload("res://scripts/map_editor/hydraulic_erosion.gd")
+	var basin = Image.create_empty(64, 64, false, Image.FORMAT_RF)
+	for y in 64:
+		for x in 64:
+			basin.set_pixel(x, y, Color(0.28 + float(63 - y) * 0.006 + sin(x * 0.2) * 0.015, 0, 0))
+	var carved = hydraulic.erode(basin, 5, 1.0)
+	for y in 64:
+		for x in 64:
+			check(carved.get_pixel(x, y).r <= basin.get_pixel(x, y).r + 0.0181, "Erosion deposition must not create needle peaks")
+	check(carved.get_data() != basin.get_data(), "Hydraulic erosion must change elevation, not just materials")
+	check(carved.get_data() == hydraulic.erode(basin, 5, 1.0).get_data(), "Hydraulic erosion must reproduce the same seed")
+	check(hydraulic.erode(basin, 5, 0.0).get_data() == basin.get_data(), "Disabling hydraulic erosion must preserve the input")
 	var first = generator.generate(256, 512, 12345)
 	var repeat = generator.generate(256, 512, 12345)
 	var different = generator.generate(256, 512, 98765)
@@ -34,6 +61,8 @@ func _run() -> void:
 	check(land > 1000 and water > 1000, "Old World must produce both land and sea")
 	print("Generator land fraction: ", float(land) / (land + water))
 	var scene = load("res://scenes/map_editor.tscn").instantiate()
+	check(scene.heightmap_quality == 1, "Scene should default to high elevation sampling")
+	scene.heightmap_quality = 0
 	# These nodes and settings must exist in the PackedScene before _ready runs.
 	check(scene.get_node_or_null("Terrain3D") is Terrain3D, "Terrain3D must be authored in the scene")
 	for path in ["WorldEnvironment", "Sun", "Camera3D", "TerrainFocus", "EditorUI/SettingsPanel", "EditorUI/SaveDialog"]:
@@ -45,7 +74,11 @@ func _run() -> void:
 	var authored_children = scene.get_children().duplicate()
 	root.add_child(scene)
 	while scene.busy: await process_frame
-	if has_renderer: check(scene.terrain.material.get_shader_param("surface_map") is Texture2D, "Custom terrain shader must receive its surface texture")
+	if has_renderer:
+		check(scene.terrain.material.get_shader_param("surface_map") is Texture2D, "Custom terrain shader must receive its surface texture")
+		for param in ["detail_albedo", "detail_normal"]:
+			var detail_texture = scene.terrain.material.get_shader_param(param) as Texture2DArray
+			check(detail_texture != null and detail_texture.get_layers() == 3 and detail_texture.has_mipmaps(), "PBR detail must bind three mipmapped material layers: " + param)
 	check(not scene.has_node("Ocean"), "There must be no separate ocean mesh node")
 	check(scene.terrain.clipmap_target == scene.terrain_focus, "Terrain LOD must follow the ground focus rather than the elevated camera")
 	check(scene.terrain.mesh_size >= 96 and scene.terrain.tessellation_level >= 1, "Terrain must retain the close-up detail settings")
@@ -64,7 +97,7 @@ func _run() -> void:
 	check(scene.get_children() == authored_children, "Runtime must not create or replace scene children")
 	check(scene.generate_button.pressed.is_connected(scene._generate), "Generate signal must be connected in the scene")
 	check(scene.save_dialog.dir_selected.is_connected(scene._save), "Save dialog signal must be connected in the scene")
-	var expected_regions = int(scene.generated_settings.width / 256) * int(scene.generated_settings.length / 256)
+	var expected_regions = int(scene.generated_settings.heightmap_width / 256) * int(scene.generated_settings.heightmap_length / 256)
 	check(scene.terrain.data.get_regions_active().size() == expected_regions, "Initial map must contain the expected regions")
 	scene.width_input.value = 256
 	scene.length_input.value = 512
@@ -95,11 +128,12 @@ func _run() -> void:
 		scene.terrain.material = saved_material
 		await process_frame
 		check(saved_material.get_shader_param("surface_map") is Texture2D, "Saved terrain material must retain its generated surface texture")
+		check(saved_material.get_shader_param("detail_albedo") is Texture2DArray, "Saved terrain material must retain PBR detail textures")
 		scene.terrain.material = original_material
 	var saved_water = load(folder.path_join("water_material.res")) as ShaderMaterial
 	check(saved_water != null and saved_water.shader.resource_path == "res://addons/terrain_3d/extras/shaders/ocean_shader.gdshader", "Saved water must retain Terrain3D native ocean shader")
 	var settings = JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("map.json")))
-	check(settings.generator_revision == 2 and settings.detail_strength == 1.0 and settings.seed == 12345 and settings.width == 256 and settings.length == 512, "Saved settings must match generated map")
+	check(settings.generator_revision == 4 and settings.detail_strength == 1.0 and settings.seed == 12345 and settings.width == 256 and settings.length == 512, "Saved settings must match generated map")
 	check(DirAccess.get_files_at(folder.path_join("terrain")).size() == 2, "Save must write Terrain3D regions")
 	var previous = FileAccess.get_file_as_bytes(folder.path_join("heightmap.exr"))
 	scene._save(ProjectSettings.globalize_path(folder))
@@ -110,6 +144,16 @@ func _run() -> void:
 	while scene.busy: await process_frame
 	check(scene.terrain.ocean_material is StandardMaterial3D, "Generation must tolerate a non-shader ocean material")
 	check(not scene.save_button.disabled, "Generation must complete with a non-shader ocean material")
+	# High sampling increases height data resolution without enlarging the world.
+	scene.quality_input.select(1)
+	scene.generate_button.pressed.emit()
+	while scene.busy: await process_frame
+	check(scene.heightmap.get_size() == Vector2i(512, 1024), "High quality must double elevation samples per axis")
+	check(scene.terrain.vertex_spacing == 0.5, "High quality must retain physical map dimensions")
+	check(scene.generated_settings.width == 256 and scene.generated_settings.length == 512, "Physical dimensions must remain unchanged")
+	check(scene.terrain.data.get_regions_active().size() == 8, "High quality must import all higher-resolution regions")
+	var high_expected = scene.heightmap.get_pixel(200, 400).r * 500.0 - 125.0
+	check(absf(scene.terrain.data.get_height(Vector3(100, 0, 200)) - high_expected) < 0.02, "High-resolution Terrain3D heights must match the generated elevation data")
 	# Check an unconfigured material before the native ocean has live clipmap RIDs.
 	# Clearing an active native material itself is an addon/engine concern.
 	var probe = load("res://scenes/map_editor.tscn").instantiate()

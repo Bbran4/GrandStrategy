@@ -18,7 +18,7 @@ static func colorize(image: Image, options: Dictionary) -> Image:
 			var h = image.get_pixel(x, y).r
 			var dx = (image.get_pixel(mini(x + 1, image.get_width() - 1), y).r - image.get_pixel(maxi(x - 1, 0), y).r) * options.height_scale * 0.5
 			var dz = (image.get_pixel(x, mini(y + 1, image.get_height() - 1)).r - image.get_pixel(x, maxi(y - 1, 0)).r) * options.height_scale * 0.5
-			var slope = Vector2(dx, dz).length()
+			var slope = Vector2(dx, dz).length() * float(options.get("samples_per_metre", 1))
 			var wet = moisture.get_noise_2d(x * scale, y * scale) * 0.5 + 0.5
 			var grain = detail.get_noise_2d(x * scale, y * scale)
 			var latitude = absf(float(y) / image.get_height() - 0.5) * 2.0

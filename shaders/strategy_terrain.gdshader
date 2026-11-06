@@ -48,6 +48,13 @@ group_uniforms general_uniforms;
 uniform bool flat_terrain_normals = false;
 uniform sampler2D surface_map : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform vec2 map_size = vec2(1024.0);
+group_uniforms surface_detail;
+uniform sampler2DArray detail_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2DArray detail_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float surface_detail_strength : hint_range(0.0, 2.0) = 1.0;
+uniform float rock_detail_scale : hint_range(0.01, 1.0) = 0.07;
+uniform float ground_detail_scale : hint_range(0.01, 1.0) = 0.045;
+uniform float detail_bump_strength : hint_range(0.0, 1.0) = 0.35;
 group_uniforms;
 
 // Varyings & Types
@@ -265,18 +272,44 @@ void fragment() {
 		BINORMAL = normalize(cross(NORMAL, TANGENT));
 	}
 
-	// Apply PBR
-	// Region-aware color lookups preserve filtering across Terrain3D boundaries.
+	// Slope-aware materials, with triplanar rock projection on steep faces.
 	vec3 tint = texture(surface_map, (v_vertex.xz + vec2(0.5)) / map_size).rgb;
-	float broad = terrain_noise(v_vertex.xz * 0.18);
-	float fine = terrain_noise(v_vertex.xz * 1.9);
-	float grain = mix(broad, fine, 0.35);
-	float fade = 1.0 - smoothstep(0.8, 4.0, length(base_ddx.xz) + length(base_ddy.xz));
-	ALBEDO = tint * (0.91 + broad * 0.12 + (fine - 0.5) * 0.09 * fade);
-	// Subtle micro-relief; geometry normals still describe the actual heightmap.
-	vec2 bump = vec2(dFdx(grain), dFdy(grain)) * 0.12 * fade;
-	NORMAL = normalize(NORMAL + vec3(bump, 0.0));
-	ROUGHNESS = 0.93;
-	SPECULAR = 0.14;
-	AO = mix(0.85, 1.0, smoothstep(0.0, 0.8, w_normal.y));
+	vec3 wn = normalize(w_normal);
+	vec3 tri = pow(abs(wn), vec3(4.0));
+	tri /= max(dot(tri, vec3(1.0)), 0.001);
+	float slope_rock = smoothstep(0.04, 0.45, 1.0 - wn.y);
+	float height_rock = smoothstep(12.0, 38.0, v_vertex.y);
+	float rock_mask = max(slope_rock, height_rock * 0.65);
+	float beach_mask = (1.0 - smoothstep(0.2, 1.6, abs(v_vertex.y))) * (1.0 - slope_rock);
+	vec2 ground_uv = v_vertex.xz * ground_detail_scale;
+	vec2 rotated_uv = mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * ground_uv * 0.73 + vec2(0.31, 0.72);
+	vec4 ground = mix(texture(detail_albedo, vec3(ground_uv, 0.0)), texture(detail_albedo, vec3(rotated_uv, 0.0)), 0.5);
+	vec4 rock = texture(detail_albedo, vec3(v_vertex.zy * rock_detail_scale, 1.0)) * tri.x
+		+ texture(detail_albedo, vec3(v_vertex.xz * rock_detail_scale, 1.0)) * tri.y
+		+ texture(detail_albedo, vec3(v_vertex.xy * rock_detail_scale, 1.0)) * tri.z;
+	vec4 sand = texture(detail_albedo, vec3(v_vertex.xz * 0.25, 2.0));
+	vec4 detail_tex = mix(mix(ground, rock, rock_mask), sand, beach_mask);
+	vec3 normal_rough = texture(detail_normal, vec3(v_vertex.xz * ground_detail_scale, 0.0)).rga;
+	float macro = terrain_noise(v_vertex.xz * 0.037);
+	float footprint = max(length(base_ddx.xz), length(base_ddy.xz));
+	float detail_fade = 1.0 - smoothstep(1.5, 6.0, footprint);
+	float amount = clamp(surface_detail_strength * detail_fade, 0.0, 1.0);
+	// Modulate the macro climate tint rather than stamping a repeated biome texture.
+	float detail_luma = dot(detail_tex.rgb, vec3(0.2126, 0.7152, 0.0722));
+	float variation = clamp(detail_luma / 0.16, 0.7, 1.3);
+	vec3 surface = tint * mix(1.0, variation, amount * 0.4);
+	surface = mix(surface, mix(tint, rock.rgb, 0.6), rock_mask * amount * 0.45);
+	ALBEDO = surface * (0.91 + macro * 0.14);
+	// Surface-gradient bump mapping keeps the perturbation in the surface frame.
+	float relief = detail_tex.a * mix(0.06, 0.28, rock_mask);
+	vec3 dx = dFdx(VERTEX);
+	vec3 dy = dFdy(VERTEX);
+	vec3 rx = cross(dy, NORMAL);
+	vec3 ry = cross(NORMAL, dx);
+	float determinant = dot(dx, rx);
+	vec3 gradient = sign(determinant) * (dFdx(relief) * rx + dFdy(relief) * ry);
+	NORMAL = normalize(max(abs(determinant), 0.00001) * NORMAL - gradient * detail_bump_strength * amount);
+	ROUGHNESS = clamp(mix(0.92, normal_rough.z, amount), 0.65, 1.0);
+	SPECULAR = mix(0.1, 0.23, rock_mask);
+	AO = mix(1.0, 0.76 + detail_tex.a * 0.24, amount * rock_mask);
 }

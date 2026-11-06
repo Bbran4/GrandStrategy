@@ -1,5 +1,7 @@
 class_name OldWorldGenerator
 extends RefCounted
+
+const HydraulicErosion = preload("res://scripts/map_editor/hydraulic_erosion.gd")
 ## Adapted from Azgaar's MIT-licensed heightmap template and operations.
 ## Uses a six-neighbour staggered raster instead of Azgaar's Voronoi graph.
 
@@ -22,8 +24,8 @@ var neighbours: Array[PackedInt32Array] = []
 var columns: int
 var rows: int
 
-func generate(width: int, length: int, map_seed: int, detail_strength: float = 1.0) -> Image:
-	assert(width >= 64 and width <= 2048 and length >= 64 and length <= 2048)
+func generate(width: int, length: int, map_seed: int, detail_strength: float = 1.0, erosion_strength: float = 1.0) -> Image:
+	assert(width >= 64 and width <= 4096 and length >= 64 and length <= 4096)
 	rng.seed = map_seed
 	# Approximately 10k simulation cells, independent of output resolution.
 	columns = maxi(16, roundi(sqrt(10000.0 * width / length)))
@@ -66,8 +68,9 @@ func generate(width: int, length: int, map_seed: int, detail_strength: float = 1
 			image.set_pixel(x, y, Color(heights[x + y * columns] / 100.0, 0, 0))
 	# Cubic reconstruction plus domain-warped, multi-scale ridges adds real geometry
 	# between the original recipe cells. Coordinates stay stable across resolutions.
+	image = _reconstruct_macro(image)
 	image.resize(width, length, Image.INTERPOLATE_CUBIC)
-	return _refine(image, map_seed, detail_strength)
+	return HydraulicErosion.erode(_refine(image, map_seed, detail_strength), map_seed, erosion_strength)
 
 func _number(value: String) -> float:
 	var parts = value.split("-")
@@ -192,13 +195,26 @@ func _smooth() -> void:
 func _refine(base: Image, map_seed: int, strength: float) -> Image:
 	var ridges = FastNoiseLite.new()
 	ridges.seed = map_seed + 411
-	ridges.frequency = 0.024
+	ridges.frequency = 0.012
 	ridges.fractal_type = FastNoiseLite.FRACTAL_RIDGED
-	ridges.fractal_octaves = 5
-	ridges.fractal_gain = 0.48
+	ridges.fractal_octaves = 7
+	ridges.fractal_gain = 0.55
 	ridges.domain_warp_enabled = true
-	ridges.domain_warp_amplitude = 14.0
+	ridges.domain_warp_amplitude = 38.0
 	ridges.domain_warp_frequency = 0.009
+	var structure = FastNoiseLite.new()
+	structure.seed = map_seed + 32171
+	structure.frequency = 0.009
+	structure.fractal_octaves = 4
+	structure.fractal_gain = 0.5
+	var spurs = FastNoiseLite.new()
+	spurs.seed = map_seed + 19489
+	spurs.frequency = 0.045
+	spurs.fractal_type = FastNoiseLite.FRACTAL_RIDGED
+	spurs.fractal_octaves = 5
+	spurs.domain_warp_enabled = true
+	spurs.domain_warp_amplitude = 9.0
+	spurs.domain_warp_frequency = 0.02
 	var fine = FastNoiseLite.new()
 	fine.seed = map_seed + 7919
 	fine.frequency = 0.11
@@ -222,12 +238,69 @@ func _refine(base: Image, map_seed: int, strength: float) -> Image:
 			var a = lerpf(base.get_pixel(ix, iy).r, base.get_pixel(ix + 1, iy).r, sx - ix)
 			var b = lerpf(base.get_pixel(ix, iy + 1).r, base.get_pixel(ix + 1, iy + 1).r, sx - ix)
 			var h = clampf(lerpf(a, b, sy - iy), 0, 1)
+			# Reserve elevation headroom so new ridges do not clip into flat tops.
+			if h > 0.2: h = 0.2 + (h - 0.2) * 0.72
 			var mountain_mask = smoothstep(0.25, 0.65, h)
 			var land_mask = smoothstep(0.19, 0.27, h)
 			var ridge = ridges.get_noise_2d(px, py)
 			var grain = fine.get_noise_2d(px, py)
+			# Rebuild upland relief at output resolution, rather than merely adding
+			# tiny bumps to the enlarged continental hills.
+			var massif = pow(1.0 - absf(structure.get_noise_2d(px + wx * 45.0, py + wy * 45.0)), 3.0)
+			var spur = spurs.get_noise_2d(px, py) * 0.5 + 0.5
+			var upland = smoothstep(0.25, 0.52, h)
+			h = 0.2 + (h - 0.2) * lerpf(1.0, (0.25 + massif * 1.05) * (0.8 + spur * 0.2), upland * clampf(strength, 0.0, 1.0))
 			# Broad plains, incised ridges, and much finer foothill relief.
 			h += (ridge * (0.008 + mountain_mask * 0.065) * land_mask + grain * (0.002 + mountain_mask * 0.009) + wx * 0.003) * strength
 			if h > 0.2: h = 0.2 + pow((h - 0.2) / 0.8, 1.22) * 0.8
 			result.set_pixel(x, y, Color(clampf(h, 0, 1), 0, 0))
-	return result
+	return _erode(result, strength)
+
+func _erode(image: Image, strength: float) -> Image:
+	# Conservative thermal weathering: steep faces shed a little material
+	# downhill. Restrict to uplands so coastlines and lowland channels stay stable.
+	if strength <= 0.0: return image
+	var width = image.get_width()
+	var length = image.get_height()
+	var values = image.get_data().to_float32_array()
+	var talus = 0.006 * 1024.0 / maxf(width, length)
+	for iteration in 6:
+		var delta = PackedFloat32Array()
+		delta.resize(values.size())
+		for y in range(1, length - 1):
+			for x in range(1, width - 1):
+				var i = x + y * width
+				if values[i] < 0.26: continue
+				var lowest = i
+				for next in [i - 1, i + 1, i - width, i + width]:
+					if values[next] < values[lowest]: lowest = next
+				var slope = values[i] - values[lowest]
+				if slope <= talus: continue
+				var transfer = (slope - talus) * 0.12 * clampf(strength, 0.0, 2.0) * smoothstep(0.26, 0.45, values[i])
+				delta[i] -= transfer
+				delta[lowest] += transfer
+		for i in values.size(): values[i] += delta[i]
+	return Image.create_from_data(width, length, false, Image.FORMAT_RF, values.to_byte_array())
+
+func _reconstruct_macro(image: Image) -> Image:
+	# The continental recipe has abrupt cell-to-cell ridge falloff. Reconstruct
+	# broad landforms before adding high-resolution geology, instead of retaining
+	# those coarse walls as narrow, near-vertical fins.
+	var width = image.get_width()
+	var length = image.get_height()
+	var data = image.get_data().to_float32_array()
+	var kernel = PackedFloat32Array([0.0625, 0.25, 0.375, 0.25, 0.0625])
+	for pass_index in 2:
+		for axis in 2:
+			var result = PackedFloat32Array()
+			result.resize(data.size())
+			for y in length:
+				for x in width:
+					var total = 0.0
+					for tap in 5:
+						var sx = clampi(x + (tap - 2 if axis == 0 else 0), 0, width - 1)
+						var sy = clampi(y + (tap - 2 if axis == 1 else 0), 0, length - 1)
+						total += data[sx + sy * width] * kernel[tap]
+					result[x + y * width] = total
+			data = result
+	return Image.create_from_data(width, length, false, Image.FORMAT_RF, data.to_byte_array())

@@ -26,10 +26,13 @@ still generated when the scene runs, rather than stored in the starter scene.
 Open `project.godot` and press **F5**, or open `scenes/map_editor.tscn` and press
 **F6**. An initial map is generated automatically.
 
-- Set width and length independently: 256–2048 samples, in 256-sample regions.
-  At one metre between vertices, a 1024-sample map spans 1023 metres between
-  its first and last vertices. These are local world dimensions, not real-world
-  geographic distances; strategy-game kilometre scaling can be added later.
+- Set physical width and length independently: 256–2048 metres.
+- Choose **Heightmap quality**: Standard uses one sample per metre; High uses
+  two samples per metre (0.5 m vertex spacing) and is the default. For example,
+  a 1024 x 512 m world gets a 2048 x 1024 float heightmap in High mode. A
+  2048 x 2048 m world gets 4096 x 4096 samples. Region size remains 256 samples.
+  The last vertex lies one vertex spacing short of the nominal tile footprint.
+- Set **Hydraulic erosion** from 0 (off) to 2 (strong), default 1.
 - Choose a seed to reproduce a world, or select **Random seed**.
 - Height scale sets the full normalized elevation range in metres. Sea level
   defaults to 20%, matching Azgaar's land threshold. Sea level is subtracted
@@ -64,7 +67,8 @@ Choose **Save heightmap + terrain…** and select an empty folder. This writes:
 
 An occupied folder is rejected. Editing the controls after generating does not
 change the settings saved with the current map. To use the saved regions in a
-separate scene, create a Terrain3D with region size 256 and vertex spacing 1,
+separate scene, create a Terrain3D with region size 256 and vertex spacing
+`1.0 / samples_per_metre` from `map.json`,
 set its data directory to `terrain/`, assign `terrain_material.res`, and give
 its assets at least one valid RGBA8 texture (as in MapEditor). Enable the Terrain3D ocean and assign
 `water_material.res` to its Ocean Material property. No separate ocean mesh is used. Retain this project's `shaders/` directory,
@@ -87,7 +91,7 @@ License and attribution are in `third_party/azgaar/LICENSE.txt`.
 This implementation uses approximately 10,000 staggered, six-neighbour raster
 cells and Godot's seeded random generator for continental layout. Cubic
 reconstruction, domain warping and multi-octave ridged detail then produce the
-final floating-point heightmap. Generator revision 2 and detail strength are
+final floating-point heightmap. Generator revision 4, height sampling, erosion strength and detail strength are
 recorded in `map.json`; existing seeds produce updated geometry with this revision. It preserves the Old World recipe, not Azgaar's exact
 Voronoi topology, random sequence, or pixel-for-pixel results. It does not yet
 create rivers, biome gameplay data, provinces, countries, or gameplay.
@@ -140,3 +144,86 @@ These settings increase GPU work and are editable in the Inspector.
 The custom terrain shader reconstructs heights bilinearly at every LOD, including
 geomorph positions, and surface colors blend continuously across the sea level.
 The generator and saved terrain dimensions are unchanged by this rendering fix.
+
+## Realistic surface detail
+
+Ground, rock and sand now use three seamless 512 x 512 PBR texture layers.
+Albedo/height and normal/roughness arrays live in `shaders/detail/` and are
+assigned to the Terrain3D material in the scene. The shader blends materials
+by slope and elevation, uses triplanar rock projection to reduce stretching,
+blends rotated ground samples to reduce repetition, and fades fine relief at
+distance to reduce shimmering. This adds approximately 8 MB of texture data.
+
+Select **Terrain3D > Material > Shader Uniforms > Surface Detail** to adjust
+surface detail strength, ground/rock scale and bump strength. These control
+surface shading independently of the MapEditor root's geometry Detail Strength.
+
+Generation also applies six conservative thermal-weathering iterations to the
+uplands. Steep cells transfer material downhill rather than simply blurring the
+whole map. This thermal pass is followed by the hydraulic stage described below.
+Revision 4 is recorded in saved settings; matching old seeds have updated
+elevations after the new reconstruction and erosion stages. Coastline blending and the native Terrain3D
+ocean remain in use.
+
+The texture arrays are included, so rebuilding is optional. Rebuild using a
+Godot executable **with graphics enabled** (GPU-backed texture arrays cannot be
+serialized correctly by the headless dummy renderer):
+
+```powershell
+godot --path . --script res://tools/build_terrain_materials.gd
+```
+
+For overview and close-up screenshots:
+
+```powershell
+godot --path . --script res://tests/terrain_detail_preview.gd
+```
+
+Images are written to `tests/output/detail_overview.png` and
+`tests/output/detail_closeup.png`. The full non-headless test suite checks
+material layers, saved texture restoration, weathering mass conservation,
+downhill transfer and lowland preservation, alongside the existing map checks.
+
+## Heightmap landforms — revision 4
+
+Old World remains the continental layout recipe. The elevation pipeline now:
+
+1. Reconstructs the coarse recipe with a separable Gaussian kernel so the old
+   cell falloff does not become tall, narrow walls.
+2. Reserves height headroom and adds domain-warped, seven-octave mountain ridges
+   and a separate secondary spur field at the actual output resolution.
+3. Applies conservative thermal weathering to steep uplands.
+4. Runs seeded water droplets down bilinear height gradients, removing soil with
+   a weighted brush and depositing sediment where their carrying capacity falls.
+   Erosion and deposition have per-cell limits to avoid pits and needle peaks.
+5. Applies the hydraulic elevation delta to the full-resolution float image and
+   imports those actual heights into Terrain3D.
+
+Droplet erosion runs on a grid up to 1024 samples across; its delta is interpolated
+onto the output while retaining the finer ridge field. This keeps generation
+practical, but it does not simulate hydraulic channels at the full 4K resolution.
+Droplets still carrying sediment at their lifetime/boundary limit export that
+sediment from the simulation. The sea band is protected from the erosion delta.
+This is not a full river, lake, drainage-network or geological-time simulation.
+
+Quality and erosion controls are authored into the runtime settings panel,
+which scrolls to fit the window. Generation remains on a worker thread. High
+mode uses four times as many elevation samples as Standard, so memory use and
+processing time increase. Saved `map.json` includes physical dimensions,
+heightmap dimensions, samples per metre, generator revision and erosion strength.
+
+The visual reference was the rugged mountain/valley heightmaps at
+https://www.motionforgepictures.com/height-maps/. No Motion Forge heightmaps or
+assets were downloaded or incorporated; this remains an original procedural
+pipeline and is not an exact recreation of those authored examples.
+
+To inspect real geometry independently of texture detail:
+
+```powershell
+godot --path . --script res://tests/heightmap_geometry_preview.gd
+```
+
+This renders a neutral gray relief study at height scale 100, with surface detail
+and bump shading disabled. It saves `tests/output/heightmap_geometry_v4.png`
+and an 8-bit grayscale inspection image, `tests/output/heightmap_data_v4.png`.
+The saved map's actual elevation data remains floating-point EXR.
