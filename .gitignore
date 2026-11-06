@@ -1,4 +1,9 @@
-# This .gitignore file should be placed at the root of your Unity project directory
+# Godot generated cache and exported builds
+.godot/
+/exports/
+export_credentials.cfg
+
+# Legacy Unity ignore rules
 #
 # Get latest from https://github.com/github/gitignore/blob/main/Unity.gitignore
 #
