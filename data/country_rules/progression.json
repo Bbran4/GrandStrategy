@@ -1,0 +1,526 @@
+{
+  "schema_version": 1,
+  "stats": {
+    "food_output": "Food output",
+    "equipment_output": "Equipment production",
+    "infantry_defense": "Infantry defense",
+    "fort_defense": "Fort defense",
+    "siege_efficiency": "Siege efficiency",
+    "ship_capacity": "Ship capacity",
+    "naval_movement": "Naval movement",
+    "tax_collection": "Tax collection",
+    "raid_loot": "Raid loot",
+    "land_raid_movement": "Land raiding movement",
+    "trade_income": "Trade income",
+    "sea_trade_income": "Sea trade income",
+    "land_trade_income": "Land trade income",
+    "settlement_cost": "Settlement cost",
+    "population_growth": "Population growth rate",
+    "retainer_upkeep": "Retainer upkeep",
+    "recruitment_rate": "Recruitment rate",
+    "law_change_cost": "Law change cost",
+    "administrative_capacity": "Administrative capacity"
+  },
+  "nodes": [
+    {
+      "id": "crop_rotation",
+      "name": "Crop rotation",
+      "tree": "technology",
+      "branch": "agriculture",
+      "column": 0,
+      "row": 0,
+      "cost": 60,
+      "requires": [],
+      "exclusive_group": "",
+      "description": "Develop crop rotation to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "food_output": 0.05
+      }
+    },
+    {
+      "id": "iron_plough",
+      "name": "Iron plough",
+      "tree": "technology",
+      "branch": "agriculture",
+      "column": 0,
+      "row": 1,
+      "cost": 120,
+      "requires": [
+        "crop_rotation"
+      ],
+      "exclusive_group": "",
+      "description": "Develop iron plough to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "food_output": 0.08
+      }
+    },
+    {
+      "id": "water_mills",
+      "name": "Water mills",
+      "tree": "technology",
+      "branch": "agriculture",
+      "column": 0,
+      "row": 2,
+      "cost": 240,
+      "requires": [
+        "iron_plough"
+      ],
+      "exclusive_group": "",
+      "description": "Develop water mills to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "food_output": 0.1
+      }
+    },
+    {
+      "id": "bloomery",
+      "name": "Bloomery iron",
+      "tree": "technology",
+      "branch": "crafts",
+      "column": 1,
+      "row": 0,
+      "cost": 60,
+      "requires": [],
+      "exclusive_group": "",
+      "description": "Develop bloomery iron to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "equipment_output": 0.05
+      }
+    },
+    {
+      "id": "forging",
+      "name": "Improved forging",
+      "tree": "technology",
+      "branch": "crafts",
+      "column": 1,
+      "row": 1,
+      "cost": 120,
+      "requires": [
+        "bloomery"
+      ],
+      "exclusive_group": "",
+      "description": "Develop improved forging to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "equipment_output": 0.08
+      }
+    },
+    {
+      "id": "workshops",
+      "name": "Town workshops",
+      "tree": "technology",
+      "branch": "crafts",
+      "column": 1,
+      "row": 2,
+      "cost": 240,
+      "requires": [
+        "forging"
+      ],
+      "exclusive_group": "",
+      "description": "Develop town workshops to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "equipment_output": 0.1
+      }
+    },
+    {
+      "id": "shield_wall",
+      "name": "Shield formations",
+      "tree": "technology",
+      "branch": "warfare",
+      "column": 2,
+      "row": 0,
+      "cost": 60,
+      "requires": [],
+      "exclusive_group": "",
+      "description": "Develop shield formations to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "infantry_defense": 0.05
+      }
+    },
+    {
+      "id": "fortified_halls",
+      "name": "Fortified halls",
+      "tree": "technology",
+      "branch": "warfare",
+      "column": 2,
+      "row": 1,
+      "cost": 120,
+      "requires": [
+        "shield_wall"
+      ],
+      "exclusive_group": "",
+      "description": "Develop fortified halls to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "fort_defense": 0.1
+      }
+    },
+    {
+      "id": "siegecraft",
+      "name": "Siegecraft",
+      "tree": "technology",
+      "branch": "warfare",
+      "column": 2,
+      "row": 2,
+      "cost": 240,
+      "requires": [
+        "fortified_halls"
+      ],
+      "exclusive_group": "",
+      "description": "Develop siegecraft to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "siege_efficiency": 0.1
+      }
+    },
+    {
+      "id": "clinker_hulls",
+      "name": "Clinker hulls",
+      "tree": "technology",
+      "branch": "seafaring",
+      "column": 3,
+      "row": 0,
+      "cost": 60,
+      "requires": [],
+      "exclusive_group": "",
+      "description": "Develop clinker hulls to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "ship_capacity": 0.05
+      }
+    },
+    {
+      "id": "longships",
+      "name": "Longships",
+      "tree": "technology",
+      "branch": "seafaring",
+      "column": 3,
+      "row": 1,
+      "cost": 120,
+      "requires": [
+        "clinker_hulls"
+      ],
+      "exclusive_group": "",
+      "description": "Develop longships to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "naval_movement": 0.1
+      }
+    },
+    {
+      "id": "navigation",
+      "name": "Coastal navigation",
+      "tree": "technology",
+      "branch": "seafaring",
+      "column": 3,
+      "row": 2,
+      "cost": 240,
+      "requires": [
+        "longships"
+      ],
+      "exclusive_group": "",
+      "description": "Develop coastal navigation to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "naval_movement": 0.1
+      }
+    },
+    {
+      "id": "oral_law",
+      "name": "Codified oral law",
+      "tree": "technology",
+      "branch": "administration",
+      "column": 4,
+      "row": 0,
+      "cost": 60,
+      "requires": [],
+      "exclusive_group": "",
+      "description": "Develop codified oral law to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "tax_collection": 0.05
+      }
+    },
+    {
+      "id": "record_keeping",
+      "name": "Written records",
+      "tree": "technology",
+      "branch": "administration",
+      "column": 4,
+      "row": 1,
+      "cost": 120,
+      "requires": [
+        "oral_law"
+      ],
+      "exclusive_group": "",
+      "description": "Develop written records to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "tax_collection": 0.05
+      }
+    },
+    {
+      "id": "land_surveys",
+      "name": "Land surveys",
+      "tree": "technology",
+      "branch": "administration",
+      "column": 4,
+      "row": 2,
+      "cost": 240,
+      "requires": [
+        "record_keeping"
+      ],
+      "exclusive_group": "",
+      "description": "Develop land surveys to expand the knowledge and capabilities of your nation.",
+      "effects": {
+        "tax_collection": 0.1
+      }
+    },
+    {
+      "id": "warband_customs",
+      "name": "Warband customs",
+      "tree": "national",
+      "branch": "raiding",
+      "column": 0,
+      "row": 0,
+      "cost": 1,
+      "requires": [],
+      "exclusive_group": "",
+      "description": "Establish a national tradition of warband customs.",
+      "effects": {
+        "raid_loot": 0.05
+      }
+    },
+    {
+      "id": "sea_raiders",
+      "name": "Sea raiders",
+      "tree": "national",
+      "branch": "raiding",
+      "column": 0,
+      "row": 1,
+      "cost": 2,
+      "requires": [
+        "warband_customs",
+        "longships"
+      ],
+      "exclusive_group": "raiding_specialty",
+      "description": "Specialize your nation in sea raiders. Choose one specialty in this branch.",
+      "effects": {
+        "raid_loot": 0.15
+      }
+    },
+    {
+      "id": "border_reavers",
+      "name": "Border reavers",
+      "tree": "national",
+      "branch": "raiding",
+      "column": 0,
+      "row": 2,
+      "cost": 2,
+      "requires": [
+        "warband_customs",
+        "shield_wall"
+      ],
+      "exclusive_group": "raiding_specialty",
+      "description": "Specialize your nation in border reavers. Choose one specialty in this branch.",
+      "effects": {
+        "land_raid_movement": 0.1
+      }
+    },
+    {
+      "id": "market_customs",
+      "name": "Market customs",
+      "tree": "national",
+      "branch": "commerce",
+      "column": 1,
+      "row": 0,
+      "cost": 1,
+      "requires": [],
+      "exclusive_group": "",
+      "description": "Establish a national tradition of market customs.",
+      "effects": {
+        "trade_income": 0.05
+      }
+    },
+    {
+      "id": "sea_merchants",
+      "name": "Sea merchants",
+      "tree": "national",
+      "branch": "commerce",
+      "column": 1,
+      "row": 1,
+      "cost": 2,
+      "requires": [
+        "market_customs",
+        "longships"
+      ],
+      "exclusive_group": "commerce_specialty",
+      "description": "Specialize your nation in sea merchants. Choose one specialty in this branch.",
+      "effects": {
+        "sea_trade_income": 0.15
+      }
+    },
+    {
+      "id": "inland_markets",
+      "name": "Inland markets",
+      "tree": "national",
+      "branch": "commerce",
+      "column": 1,
+      "row": 2,
+      "cost": 2,
+      "requires": [
+        "market_customs",
+        "record_keeping"
+      ],
+      "exclusive_group": "commerce_specialty",
+      "description": "Specialize your nation in inland markets. Choose one specialty in this branch.",
+      "effects": {
+        "land_trade_income": 0.15
+      }
+    },
+    {
+      "id": "homesteaders",
+      "name": "Homesteaders",
+      "tree": "national",
+      "branch": "settlement",
+      "column": 2,
+      "row": 0,
+      "cost": 1,
+      "requires": [],
+      "exclusive_group": "",
+      "description": "Establish a national tradition of homesteaders.",
+      "effects": {
+        "food_output": 0.05
+      }
+    },
+    {
+      "id": "frontier_colonies",
+      "name": "Frontier colonies",
+      "tree": "national",
+      "branch": "settlement",
+      "column": 2,
+      "row": 1,
+      "cost": 2,
+      "requires": [
+        "homesteaders",
+        "iron_plough"
+      ],
+      "exclusive_group": "settlement_specialty",
+      "description": "Specialize your nation in frontier colonies. Choose one specialty in this branch.",
+      "effects": {
+        "settlement_cost": -0.1
+      }
+    },
+    {
+      "id": "prosperous_villages",
+      "name": "Prosperous villages",
+      "tree": "national",
+      "branch": "settlement",
+      "column": 2,
+      "row": 2,
+      "cost": 2,
+      "requires": [
+        "homesteaders",
+        "water_mills"
+      ],
+      "exclusive_group": "settlement_specialty",
+      "description": "Specialize your nation in prosperous villages. Choose one specialty in this branch.",
+      "effects": {
+        "population_growth": 0.1
+      }
+    },
+    {
+      "id": "martial_training",
+      "name": "Martial training",
+      "tree": "national",
+      "branch": "warfare",
+      "column": 3,
+      "row": 0,
+      "cost": 1,
+      "requires": [],
+      "exclusive_group": "",
+      "description": "Establish a national tradition of martial training.",
+      "effects": {
+        "infantry_defense": 0.05
+      }
+    },
+    {
+      "id": "household_guard",
+      "name": "Household guard",
+      "tree": "national",
+      "branch": "warfare",
+      "column": 3,
+      "row": 1,
+      "cost": 2,
+      "requires": [
+        "martial_training",
+        "forging"
+      ],
+      "exclusive_group": "warfare_specialty",
+      "description": "Specialize your nation in household guard. Choose one specialty in this branch.",
+      "effects": {
+        "retainer_upkeep": -0.1
+      }
+    },
+    {
+      "id": "levy_hosts",
+      "name": "Levy hosts",
+      "tree": "national",
+      "branch": "warfare",
+      "column": 3,
+      "row": 2,
+      "cost": 2,
+      "requires": [
+        "martial_training",
+        "shield_wall"
+      ],
+      "exclusive_group": "warfare_specialty",
+      "description": "Specialize your nation in levy hosts. Choose one specialty in this branch.",
+      "effects": {
+        "recruitment_rate": 0.1
+      }
+    },
+    {
+      "id": "tribal_compacts",
+      "name": "Tribal compacts",
+      "tree": "national",
+      "branch": "governance",
+      "column": 4,
+      "row": 0,
+      "cost": 1,
+      "requires": [],
+      "exclusive_group": "",
+      "description": "Establish a national tradition of tribal compacts.",
+      "effects": {
+        "tax_collection": 0.05
+      }
+    },
+    {
+      "id": "council_networks",
+      "name": "Council networks",
+      "tree": "national",
+      "branch": "governance",
+      "column": 4,
+      "row": 1,
+      "cost": 2,
+      "requires": [
+        "tribal_compacts",
+        "record_keeping"
+      ],
+      "exclusive_group": "governance_specialty",
+      "description": "Specialize your nation in council networks. Choose one specialty in this branch.",
+      "effects": {
+        "law_change_cost": -0.1
+      }
+    },
+    {
+      "id": "central_authority",
+      "name": "Central authority",
+      "tree": "national",
+      "branch": "governance",
+      "column": 4,
+      "row": 2,
+      "cost": 2,
+      "requires": [
+        "tribal_compacts",
+        "land_surveys"
+      ],
+      "exclusive_group": "governance_specialty",
+      "description": "Specialize your nation in central authority. Choose one specialty in this branch.",
+      "effects": {
+        "administrative_capacity": 0.15
+      }
+    }
+  ]
+}

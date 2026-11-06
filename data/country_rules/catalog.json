@@ -1,0 +1,80 @@
+{
+  "tribal_profiles": {
+    "clan_council": "Clan council",
+    "tribal_assembly": "Tribal assembly",
+    "war_chiefdom": "War chiefdom"
+  },
+  "cultures": {
+    "northern": "Northern",
+    "riverland": "Riverland",
+    "highland": "Highland",
+    "coastal": "Coastal"
+  },
+  "faiths": {
+    "ancestor_veneration": "Ancestor veneration",
+    "nature_worship": "Nature worship",
+    "hearth_faith": "Hearth faith"
+  },
+  "traditions": {
+    "seafarers": "Seafarers",
+    "oral_history": "Oral history",
+    "frontier_settlers": "Frontier settlers",
+    "merchant_networks": "Merchant networks",
+    "warrior_society": "Warrior society",
+    "communal_granaries": "Communal granaries"
+  },
+  "laws": {
+    "authority": {
+      "council": "Council authority",
+      "assembly": "Assembly authority",
+      "chief": "Chief authority"
+    },
+    "taxation": {
+      "contributions": "Customary contributions",
+      "tribute": "Regular tribute",
+      "levy": "Assessed levy"
+    },
+    "military_service": {
+      "volunteers": "Volunteer warbands",
+      "seasonal_levies": "Seasonal levies",
+      "retainers": "Chiefly retainers"
+    },
+    "land_tenure": {
+      "communal": "Communal lands",
+      "clan": "Clan holdings"
+    },
+    "religious_policy": {
+      "local_customs": "Local customs",
+      "protected_faith": "Protected faith"
+    }
+  },
+  "ai_axes": [
+    "aggression",
+    "expansion",
+    "diplomacy",
+    "trade",
+    "military_investment",
+    "risk_tolerance"
+  ],
+  "technology_tree": {
+    "id": "tribal_to_medieval",
+    "branches": [
+      "agriculture",
+      "crafts",
+      "warfare",
+      "seafaring",
+      "administration"
+    ]
+  },
+  "national_tree": {
+    "id": "tribal_paths",
+    "branches": {
+      "raiding": "Raiding",
+      "commerce": "Commerce",
+      "settlement": "Settlement",
+      "warfare": "Warfare",
+      "governance": "Governance"
+    }
+  },
+  "note": "Design selections only. Technology research, skill progression, law effects and AI decisions are not simulated yet."
+}

@@ -1,4 +1,5 @@
 extends SceneTree
+const CountryStore = preload("res://scripts/countries/country_store.gd")
 const Fixture = preload("res://tests/opengs_fixture.gd")
 var failures: Array[String] = []
 func _initialize() -> void: call_deferred("_run")
@@ -13,8 +14,19 @@ func _run() -> void:
 	scene.erosion_strength = 0
 	scene.get_node("%WidthInput").value = 256
 	scene.get_node("%LengthInput").value = 256
+	var country_folder = "res://tests/output/province_countries_" + str(Time.get_ticks_usec())
+	var country = CountryStore.blank()
+	country.id = "TEST_TRIBE"
+	country.name = "Test tribe"
+	country.adjective = "Tribal"
+	country.color = "#315f73"
+	check(CountryStore.save_country(country,country_folder).is_empty(),"Country fixture must save")
+	scene.country_directory = country_folder
 	root.add_child(scene)
+	check(scene.country_library.item_count == 2,"Map must load the saved country library")
 	while scene.busy: await process_frame
+	scene._on_country_library_selected(1)
+	check(scene.province_owner.text == "TEST_TRIBE" and scene.province_owner_color.color.is_equal_approx(Color("315f73")),"Country picker must populate stable ID and map color")
 	check(scene.province_import_button.pressed.is_connected(scene._on_province_import_pressed), "Province import button must be scene-authored")
 	check(scene.province_import_dialog.dir_selected.is_connected(scene._import_provinces), "Province folder dialog must be scene-authored")
 	check(scene.provinces.province_selected.is_connected(scene._on_province_selected), "Selection signal must be scene-authored")

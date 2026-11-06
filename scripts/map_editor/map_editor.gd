@@ -1,5 +1,9 @@
 extends Node3D
 
+const CountryStore = preload("res://scripts/countries/country_store.gd")
+@export_dir var country_directory: String = ""
+@onready var country_library: OptionButton = %CountryLibrary
+
 const ProvinceImporter = preload("res://scripts/provinces/opengs_importer.gd")
 const StrategyOceanShader = preload("res://shaders/strategy_ocean.gdshader")
 @export_dir var opengs_import_directory: String = "res://data/opengs"
@@ -64,6 +68,9 @@ var _colored_detail_strength: float = 1.0
 var _colored_bump_strength: float = 0.35
 
 func _ready() -> void:
+	_refresh_country_library()
+	country_library.get_popup().about_to_popup.connect(_refresh_country_library)
+	country_library.item_selected.connect(_on_country_library_selected)
 	profile_input.select(relief_profile)
 	var authored_detail = terrain.material.get_shader_param("surface_detail_strength")
 	var authored_bump = terrain.material.get_shader_param("detail_bump_strength")
@@ -202,6 +209,7 @@ func _on_province_selected(index: int) -> void:
 		return
 	var record = provinces.map_data.provinces[index]
 	province_owner.text = record.owner
+	_refresh_country_library()
 	province_owner_color.color = Color.from_string(record.owner_color, Color("c9a05a"))
 	province_info.text = "%s\nTerritory: %s\nType: %s · Terrain: %s\nArea: %.1f m²\nOwner: %s\nNeighbours (%d): %s" % [record.id, record.territory_id, record.type, record.terrain if not record.terrain.is_empty() else "not supplied", record.area_m2, record.owner if not record.owner.is_empty() else "unassigned", record.neighbours.size(), ", ".join(record.neighbours.slice(0, 12))]
 
@@ -363,3 +371,23 @@ func _save(folder: String) -> void:
 
 func _exit_tree() -> void:
 	if worker != null and worker.is_started(): worker.wait_to_finish()
+
+func _refresh_country_library() -> void:
+	country_library.clear()
+	country_library.add_item("Choose saved country / manual ID")
+	country_library.set_item_metadata(0,{})
+	var library = CountryStore.load_library(country_directory)
+	for country in library.records:
+		if country.archived: continue
+		country_library.add_item(country.name + " [" + country.id + "]")
+		country_library.set_item_metadata(country_library.item_count-1,country)
+	country_library.tooltip_text = "Choose a saved nation to fill its ID and map color; then assign it to the selected province."
+	if not library.errors.is_empty(): country_library.tooltip_text += "\n" + "; ".join(library.errors)
+	for i in range(1,country_library.item_count):
+		if country_library.get_item_metadata(i).id == province_owner.text: country_library.select(i); break
+
+func _on_country_library_selected(index: int) -> void:
+	if busy or index == 0: return
+	var country: Dictionary = country_library.get_item_metadata(index)
+	province_owner.text = country.id
+	province_owner_color.color = Color(country.color)
